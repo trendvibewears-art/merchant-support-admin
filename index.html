@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify Support Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .login-container {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f5f5f5;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-box h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 24px;
+        }
+
+        .login-box p {
+            color: #666;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .login-form input {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 15px;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        .login-form input:focus {
+            outline: none;
+            border-color: #999;
+        }
+
+        .login-form button {
+            width: 100%;
+            padding: 14px;
+            background: #666;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .login-form button:hover {
+            background: #555;
+        }
+
+        .error-message {
+            color: #ef4444;
+            font-size: 14px;
+            margin-top: -10px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .dashboard {
+            display: none;
+            height: 100vh;
+        }
+
+        .dashboard.active {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e5e5e5;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .sidebar-header h2 {
+            margin-bottom: 5px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .sidebar-header p {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .logout-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #f5f5f5;
+            color: #666;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #e5e5e5;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            background: white;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: #fafafa;
+        }
+
+        .tab.active {
+            color: #333;
+            border-bottom-color: #666;
+        }
+
+        .new-customer-badge {
+            display: inline-block;
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+            font-weight: 600;
+        }
+
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .session-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid #f5f5f5;
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .session-item:hover {
+            background: #fafafa;
+        }
+
+        .session-item.active {
+            background: #f5f5f5;
+        }
+
+        .session-item.new-customer {
+            background: #fef2f2;
+        }
+
+        .session-item.new-customer:hover {
+            background: #fee2e2;
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .session-name {
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+        }
+
+        .online-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .online-dot.online {
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .session-time {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .session-email {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .session-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .session-btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            border: 1px solid #e5e5e5;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .session-btn:hover {
+            background: #f5f5f5;
+        }
+
+        .session-btn.unarchive {
+            color: #666;
+            border-color: #4ade80;
+        }
+
+        .session-btn.unarchive:hover {
+            background: #f0fdf4;
+        }
+
+        .session-btn.archive {
+            color: #666;
+        }
+
+        .session-btn.delete {
+            color: #ef4444;
+            border-color: #ef4444;
+        }
+
+        .session-btn.delete:hover {
+            background: #fef2f2;
+        }
+
+        .unread-badge {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            background: #666;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .unread-badge.show {
+            display: block;
+        }
+
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #fafafa;
+            position: relative;
+        }
+
+        .chat-header {
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .chat-header h3 {
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        .chat-header p {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .messages-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .messages-container {
+            height: 100%;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: 150px;
+            scroll-behavior: smooth;
+        }
+
+        .date-divider {
+            text-align: center;
+            margin: 20px 0;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .join-notification {
+            text-align: center;
+            margin: 15px 0;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .message.admin {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            flex-shrink: 0;
+        }
+
+        .message-content {
+            max-width: 70%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.admin .message-content {
+            align-items: flex-end;
+        }
+
+        .message-bubble {
+            padding: 10px 14px;
+            border-radius: 16px;
+            word-wrap: break-word;
+            font-size: 15px;
+            line-height: 1.4;
+        }
+
+        .message.admin .message-bubble {
+            background: #d1d5db;
+            color: #333;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.customer .message-bubble {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #e5e5e5;
+        }
+
+        .message.system .message-bubble {
+            background: #f0f9ff;
+            color: #0369a1;
+            border: 1px solid #e0f2fe;
+            border-radius: 12px;
+        }
+
+        .message-info {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 4px;
+        }
+
+        .typing-indicator {
+            position: fixed;
+            bottom: 75px;
+            left: 50%;
+            transform: translateX(calc(-50% + 175px));
+            width: calc(100% - 370px);
+            max-width: 600px;
+            padding: 8px 16px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 13px;
+            color: #666;
+            display: none;
+            z-index: 90;
+        }
+
+        .typing-indicator.show {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .typing-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #999;
+            margin: 0 1px;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-6px); }
+        }
+
+        .input-container {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(calc(-50% + 175px));
+            width: calc(100% - 370px);
+            max-width: 600px;
+            padding: 15px 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-wrapper input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #e5e5e5;
+            border-radius: 24px;
+            font-size: 15px;
+            background: #fafafa;
+        }
+
+        .input-wrapper input:focus {
+            outline: none;
+            border-color: #999;
+            background: white;
+        }
+
+        .input-wrapper button {
+            padding: 12px 24px;
+            background: #666;
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .input-wrapper button:hover {
+            background: #555;
+        }
+
+        .no-session-selected {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #999;
+            font-size: 16px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .end-chat-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .end-chat-btn:hover {
+            background: #dc2626;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                position: absolute;
+                height: 100%;
+                z-index: 10;
+                transition: transform 0.3s;
+            }
+
+            .sidebar.hide-mobile {
+                transform: translateX(-100%);
+            }
+
+            .chat-area {
+                width: 100%;
+            }
+
+            .typing-indicator {
+                width: calc(100% - 20px);
+                transform: translateX(-50%);
+            }
+
+            .input-container {
+                width: calc(100% - 20px);
+                transform: translateX(-50%);
+            }
+
+            .messages-container {
+                padding-bottom: 140px;
+            }
+        }
+
+        .connection-error {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            text-align: center;
+            font-size: 13px;
+            display: none;
+        }
+
+        .connection-error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>🔐 Admin Login</h1>
+            <p>Enter your credentials to access the dashboard</p>
+            <form class="login-form" id="loginForm">
+                <input type="text" id="username" placeholder="Username" required autocomplete="username">
+                <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                <div class="error-message" id="errorMessage">Invalid credentials. Please try again.</div>
+                <button type="submit">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="dashboard" id="dashboard">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Chat Sessions</h2>
+                <p id="adminEmail"></p>
+                <button class="logout-btn" id="logoutBtn">Logout</button>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" id="activeTab">Active</button>
+                <button class="tab" id="archivedTab">Archived</button>
+            </div>
+
+            <div class="sessions-list" id="sessionsList">
+                <div class="empty-state">No active sessions</div>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <div class="connection-error" id="connectionError">
+                Connection lost. Trying to reconnect...
+            </div>
+
+            <div id="noSessionSelected" class="no-session-selected">
+                Select a chat session to start messaging
+            </div>
+            
+            <div id="chatContent" class="hidden">
+                <div class="chat-header">
+                    <h3 id="customerNameHeader"></h3>
+                    <p id="customerEmailHeader"></p>
+                    <button class="end-chat-btn" id="endChatBtn">End Chat</button>
+                </div>
+                
+                <div class="messages-wrapper">
+                    <div class="messages-container" id="messagesContainer">
+                        <div class="date-divider">Today</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="typing-indicator" id="typingIndicator">
+        <span>Customer is typing</span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+    </div>
+
+    <div class="input-container hidden" id="inputContainer">
+        <div class="input-wrapper">
+            <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
+            authDomain: "support-chat-6391e.firebaseapp.com",
+            databaseURL: "https://support-chat-6391e-default-rtdb.firebaseio.com",
+            projectId: "support-chat-6391e",
+            storageBucket: "support-chat-6391e.firebasestorage.app",
+            messagingSenderId: "817965074720",
+            appId: "1:817965074720:web:365b7c175189150b11af45",
+            measurementId: "G-BBQ6TPTJW5"
+        };
+
+        const ADMIN_CREDENTIALS = {
+            username: 'FATISCO8',
+            password: 'FATISCO4LYFE'
+        };
+
+        let app, database;
+        
+        try {
+            app = initializeApp(firebaseConfig);
+            database = getDatabase(app);
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            showConnectionError();
+        }
+
+        let currentSessionId = null;
+        let isTyping = false;
+        let typingTimeout = null;
+        let adminPresenceRef = null;
+        let currentCustomerInitials = '';
+        let lastMessageCounts = {};
+        let showingArchived = false;
+        let userScrolledUp = false;
+        let notifiedCustomers = new Set();
+        let adminHasResponded = {};
+
+        const loginContainer = document.getElementById('loginContainer');
+        const dashboard = document.getElementById('dashboard');
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const sessionsList = document.getElementById('sessionsList');
+        const noSessionSelected = document.getElementById('noSessionSelected');
+        const chatContent = document.getElementById('chatContent');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const connectionError = document.getElementById('connectionError');
+        const sidebar = document.getElementById('sidebar');
+        const inputContainer = document.getElementById('inputContainer');
+        const activeTab = document.getElementById('activeTab');
+        const archivedTab = document.getElementById('archivedTab');
+        const endChatBtn = document.getElementById('endChatBtn');
+
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        messagesContainer.addEventListener('scroll', () => {
+            const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
+            userScrolledUp = !isAtBottom;
+        });
+
+        window.addEventListener('load', () => {
+            const savedAdmin = localStorage.getItem('adminSession');
+            if (savedAdmin) {
+                try {
+                    const adminData = JSON.parse(savedAdmin);
+                    const loginTime = adminData.timestamp;
+                    const now = Date.now();
+                    const hoursSinceLogin = (now - loginTime) / (1000 * 60 * 60);
+                    
+                    if (hoursSinceLogin < 24) {
+                        document.getElementById('adminEmail').textContent = adminData.username;
+                        loginContainer.style.display = 'none';
+                        dashboard.classList.add('active');
+                        loadSessions();
+                    } else {
+                        localStorage.removeItem('adminSession');
+                    }
+                } catch (error) {
+                    console.error('Error loading saved session:', error);
+                    localStorage.removeItem('adminSession');
+                }
+            }
+        });
+
+        function showConnectionError() {
+            connectionError.classList.add('show');
+            setTimeout(() => {
+                connectionError.classList.remove('show');
+            }, 5000);
+        }
+
+        function playNotificationSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (error) {
+                console.log('Audio playback error:', error);
+            }
+        }
+
+        function showBrowserNotification(title, body) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, {
+                    body: body,
+                    icon: '🔔',
+                    badge: '🔔'
+                });
+            }
+        }
+
+        function scrollToBottom() {
+            if (!userScrolledUp) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+        function getInitials(name) {
+            return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        }
+
+        function endChatNotification() {
+            if (!currentSessionId) return;
+            
+            if (confirm('Send "Chat Ended" notification to customer? Customer can still message you.')) {
+                try {
+                    const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
+                    set(messageRef, {
+                        text: 'Chat session marked as completed by support agent. You can still continue messaging if needed.',
+                        type: 'notification',
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    alert('Chat ended notification sent to customer.');
+                    setTimeout(scrollToBottom, 100);
+                } catch (error) {
+                    console.error('Error sending end chat notification:', error);
+                    showConnectionError();
+                }
+            }
+        }
+
+        endChatBtn.addEventListener('click', endChatNotification);
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+                localStorage.setItem('adminSession', JSON.stringify({
+                    username: username,
+                    timestamp: Date.now()
+                }));
+
+                document.getElementById('adminEmail').textContent = username;
+                loginContainer.style.display = 'none';
+                dashboard.classList.add('active');
+                loadSessions();
+            } else {
+                errorMessage.classList.add('show');
+                setTimeout(() => errorMessage.classList.remove('show'), 3000);
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            if (currentSessionId && adminPresenceRef) {
+                set(adminPresenceRef, false);
+            }
+            localStorage.removeItem('adminSession');
+            dashboard.classList.remove('active');
+            loginContainer.style.display = 'flex';
+            currentSessionId = null;
+        });
+
+        activeTab.addEventListener('click', () => {
+            showingArchived = false;
+            activeTab.classList.add('active');
+            archivedTab.classList.remove('active');
+            loadSessions();
+        });
+
+        archivedTab.addEventListener('click', () => {
+            showingArchived = true;
+            archivedTab.classList.add('active');
+            activeTab.classList.remove('active');
+            loadSessions();
+        });
+
+        function loadSessions() {
+            const sessionsRef = ref(database, 'sessions');
+            onValue(sessionsRef, (snapshot) => {
+                const sessions = snapshot.val();
+                sessionsList.innerHTML = '';
+
+                if (!sessions) {
+                    sessionsList.innerHTML = `<div class="empty-state">No ${showingArchived ? 'archived' : 'active'} sessions</div>`;
+                    return;
+                }
+
+                const filteredSessions = Object.entries(sessions).filter(([id, session]) => {
+                    return showingArchived ? session.archived : !session.archived;
+                });
+
+                if (filteredSessions.length === 0) {
+                    sessionsList.innerHTML = `<div class="empty-state">No ${showingArchived ? 'archived' : 'active'} sessions</div>`;
+                    return;
+                }
+
+                filteredSessions.forEach(([id, session]) => {
+                    const sessionDiv = document.createElement('div');
+                    const isNewCustomer = session.newCustomer && !showingArchived;
+                    sessionDiv.className = `session-item ${id === currentSessionId ? 'active' : ''} ${isNewCustomer ? 'new-customer' : ''}`;
+                    
+                    const time = session.startedAt ? formatTime(session.startedAt) : '';
+                    
+                    const actions = showingArchived 
+                        ? `<button class="session-btn unarchive" data-id="${id}">↩️ Unarchive</button>
+                           <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`
+                        : `<button class="session-btn archive" data-id="${id}">📦 Archive</button>
+                           <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`;
+                    
+                    const newBadge = isNewCustomer ? '<span class="new-customer-badge">NEW</span>' : '';
+                    
+                    sessionDiv.innerHTML = `
+                        <div class="session-header">
+                            <div class="session-name">
+                                <span class="online-dot ${session.customerOnline ? 'online' : ''}"></span>
+                                ${session.customerName}${newBadge}
+                            </div>
+                            <div class="session-time">${time}</div>
+                        </div>
+                        <div class="session-email">${session.customerEmail}</div>
+                        <div class="session-actions">
+                            ${actions}
+                        </div>
+                        <div class="unread-badge ${session.unreadByAdmin > 0 ? 'show' : ''}">${session.unreadByAdmin || 0}</div>
+                    `;
+
+                    const actionButtons = sessionDiv.querySelectorAll('.session-btn');
+                    actionButtons.forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const sessionId = btn.dataset.id;
+                            if (btn.classList.contains('archive')) {
+                                archiveSession(sessionId);
+                            } else if (btn.classList.contains('unarchive')) {
+                                unarchiveSession(sessionId);
+                            } else if (btn.classList.contains('delete')) {
+                                deleteSession(sessionId, session.customerName);
+                            }
+                        });
+                    });
+
+                    sessionDiv.addEventListener('click', (e) => {
+                        if (!e.target.classList.contains('session-btn')) {
+                            selectSession(id, session);
+                        }
+                    });
+
+                    sessionsList.appendChild(sessionDiv);
+
+                    if (isNewCustomer && !notifiedCustomers.has(id)) {
+                        notifiedCustomers.add(id);
+                        playNotificationSound();
+                        showBrowserNotification(
+                            '🆕 New Customer',
+                            `${session.customerName} just joined the chat!`
+                        );
+                    }
+
+                    get(ref(database, `sessions/${id}/messages`)).then((msgSnapshot) => {
+                        const messages = msgSnapshot.val();
+                        const messageCount = messages ? Object.keys(messages).length : 0;
+                        
+                        if (lastMessageCounts[id] && messageCount > lastMessageCounts[id]) {
+                            const lastMsg = messages ? Object.values(messages).pop() : null;
+                            if (lastMsg && lastMsg.sender === 'customer' && id !== currentSessionId) {
+                                playNotificationSound();
+                                showBrowserNotification(
+                                    `Message from ${session.customerName}`,
+                                    lastMsg.text.substring(0, 50) + (lastMsg.text.length > 50 ? '...' : '')
+                                );
+                            }
+                        }
+                        lastMessageCounts[id] = messageCount;
+                    });
+                });
+            }, (error) => {
+                console.error('Error loading sessions:', error);
+                showConnectionError();
+            });
+        }
+
+        function archiveSession(sessionId) {
+            if (confirm('Archive this chat? It will be moved to the Archived tab.')) {
+                update(ref(database, `sessions/${sessionId}`), {
+                    archived: true,
+                    newCustomer: false
+                });
+                
+                if (currentSessionId === sessionId) {
+                    currentSessionId = null;
+                    noSessionSelected.classList.remove('hidden');
+                    chatContent.classList.add('hidden');
+                    inputContainer.classList.add('hidden');
+                }
+            }
+        }
+
+        function unarchiveSession(sessionId) {
+            update(ref(database, `sessions/${sessionId}`), {
+                archived: false,
+                newCustomer: false
+            });
+        }
+
+        function deleteSession(sessionId, customerName) {
+            if (confirm(`Permanently delete chat with ${customerName}? This cannot be undone.`)) {
+                remove(ref(database, `sessions/${sessionId}`));
+                
+                if (currentSessionId === sessionId) {
+                    currentSessionId = null;
+                    noSessionSelected.classList.remove('hidden');
+                    chatContent.classList.add('hidden');
+                    inputContainer.classList.add('hidden');
+                }
+            }
+        }
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = (now - date) / 1000;
+            
+            if (diff < 60) return 'a moment ago';
+            if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function selectSession(sessionId, session) {
+            currentSessionId = sessionId;
+            currentCustomerInitials = getInitials(session.customerName);
+
+            document.querySelectorAll('.session-item').forEach(item => item.classList.remove('active'));
+            event.target.closest('.session-item')?.classList.add('active');
+
+            noSessionSelected.classList.add('hidden');
+            chatContent.classList.remove('hidden');
+            inputContainer.classList.remove('hidden');
+            chatContent.style.display = 'flex';
+
+            document.getElementById('customerNameHeader').textContent = session.customerName;
+            document.getElementById('customerEmailHeader').textContent = session.customerEmail;
+
+            update(ref(database, `sessions/${sessionId}`), { 
+                unreadByAdmin: 0,
+                newCustomer: false
+            });
+
+            if (adminPresenceRef) {
+                set(adminPresenceRef, false);
+            }
+            adminPresenceRef = ref(database, `sessions/${sessionId}/adminOnline`);
+            set(adminPresenceRef, true);
+            onDisconnect(adminPresenceRef).set(false);
+
+            listenForMessages(sessionId);
+            listenForCustomerTyping(sessionId);
+            messageInput.focus();
+
+            if (window.innerWidth <= 768) {
+                sidebar.classList.add('hide-mobile');
+            }
+        }
+
+        function sendMessage() {
+            if (!currentSessionId) return;
+            
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            try {
+                const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
+                set(messageRef, {
+                    text: message,
+                    sender: 'admin',
+                    timestamp: serverTimestamp(),
+                    read: false
+                });
+
+                // Mark that admin has responded to this session
+                if (!adminHasResponded[currentSessionId]) {
+                    adminHasResponded[currentSessionId] = true;
+                    update(ref(database, `sessions/${currentSessionId}`), {
+                        agentResponded: true,
+                        agentRespondedAt: serverTimestamp()
+                    });
+                }
+
+                messageInput.value = '';
+                userScrolledUp = false;
+                stopTyping();
+                setTimeout(scrollToBottom, 100);
+            } catch (error) {
+                console.error('Error sending message:', error);
+                showConnectionError();
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        messageInput.addEventListener('input', () => {
+            if (!currentSessionId) return;
+
+            if (!isTyping) {
+                isTyping = true;
+                set(ref(database, `sessions/${currentSessionId}/adminTyping`), true);
+            }
+
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(stopTyping, 1000);
+        });
+
+        function stopTyping() {
+            if (!currentSessionId) return;
+            isTyping = false;
+            set(ref(database, `sessions/${currentSessionId}/adminTyping`), false);
+        }
+
+        function listenForMessages(sessionId) {
+            const messagesRef = ref(database, `sessions/${sessionId}/messages`);
+            let previousMessageCount = 0;
+
+            onValue(messagesRef, (snapshot) => {
+                const messages = snapshot.val();
+                messagesContainer.innerHTML = '<div class="date-divider">Today</div>';
+
+                const currentMessageCount = messages ? Object.keys(messages).length : 0;
+
+                if (messages) {
+                    Object.entries(messages).forEach(([id, msg]) => {
+                        if (msg.type === 'notification') {
+                            displayNotification(msg);
+                        } else {
+                            displayMessage(msg, id, sessionId);
+                        }
+                    });
+                }
+
+                // Play sound if new customer message arrived
+                if (currentMessageCount > previousMessageCount && messages) {
+                    const lastMsg = Object.values(messages).pop();
+                    if (lastMsg && lastMsg.sender === 'customer') {
+                        playNotificationSound();
+                    }
+                }
+
+                previousMessageCount = currentMessageCount;
+                setTimeout(scrollToBottom, 100);
+            }, (error) => {
+                console.error('Error listening for messages:', error);
+                showConnectionError();
+            });
+        }
+
+        function displayNotification(msg) {
+            const notifDiv = document.createElement('div');
+            notifDiv.className = 'join-notification';
+            notifDiv.textContent = msg.text;
+            messagesContainer.appendChild(notifDiv);
+        }
+
+        function displayMessage(msg, id, sessionId) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${msg.sender}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = msg.sender === 'admin' ? 'SS' : currentCustomerInitials;
+
+            const content = document.createElement('div');
+            content.className = 'message-content';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = msg.text;
+
+            const info = document.createElement('div');
+            info.className = 'message-info';
+
+            const time = msg.timestamp ? formatTime(msg.timestamp) : 'now';
+            const receipt = msg.read ? 'seen' : 'delivered';
+
+            if (msg.sender === 'admin') {
+                info.innerHTML = `<span>${time}, ${receipt}</span>`;
+            } else {
+                info.innerHTML = `<span>${time}</span>`;
+            }
+
+            content.appendChild(bubble);
+            content.appendChild(info);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(content);
+            messagesContainer.appendChild(messageDiv);
+        }
+
+        function listenForCustomerTyping(sessionId) {
+            const typingRef = ref(database, `sessions/${sessionId}/customerTyping`);
+            onValue(typingRef, (snapshot) => {
+                const typing = snapshot.val();
+                if (typing) {
+                    typingIndicator.classList.add('show');
+                } else {
+                    typingIndicator.classList.remove('show');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
