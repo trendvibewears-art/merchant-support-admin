@@ -554,22 +554,6 @@
             display: none !important;
         }
 
-        .end-chat-btn {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            transition: background 0.2s;
-        }
-
-        .end-chat-btn:hover {
-            background: #dc2626;
-        }
-
         @media (max-width: 768px) {
             .sidebar {
                 width: 100%;
@@ -657,11 +641,10 @@
                 Select a chat session to start messaging
             </div>
             
-            <div id="chatContent" class="hidden">
+            <div id="chatContent" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="chat-header">
                     <h3 id="customerNameHeader"></h3>
                     <p id="customerEmailHeader"></p>
-                    <button class="end-chat-btn" id="endChatBtn">End Chat</button>
                 </div>
                 
                 <div class="messages-wrapper">
@@ -692,19 +675,19 @@
         import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
         const firebaseConfig = {
-            apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
-            authDomain: "support-chat-6391e.firebaseapp.com",
-            databaseURL: "https://support-chat-6391e-default-rtdb.firebaseio.com",
-            projectId: "support-chat-6391e",
-            storageBucket: "support-chat-6391e.firebasestorage.app",
-            messagingSenderId: "817965074720",
-            appId: "1:817965074720:web:365b7c175189150b11af45",
-            measurementId: "G-BBQ6TPTJW5"
-        };
+    apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
+    authDomain: "support-chat-6391e.firebaseapp.com",
+    databaseURL: "https://support-chat-6391e-default-rtdb.firebaseio.com",
+    projectId: "support-chat-6391e",
+    storageBucket: "support-chat-6391e.firebasestorage.app",
+    messagingSenderId: "817965074720",
+    appId: "1:817965074720:web:365b7c175189150b11af45",
+    measurementId: "G-BBQ6TPTJW5"
+  };
 
         const ADMIN_CREDENTIALS = {
-            username: 'FATISCO8',
-            password: 'FATISCO4LYFE'
+            username: 'admin',
+            password: 'admin123' // CHANGE THIS PASSWORD!
         };
 
         let app, database;
@@ -726,7 +709,64 @@
         let showingArchived = false;
         let userScrolledUp = false;
         let notifiedCustomers = new Set();
-        let adminHasResponded = {};
+        let notificationPermissionGranted = false;
+
+        // Request notification permission
+        async function requestNotificationPermission() {
+            if ('Notification' in window) {
+                if (Notification.permission === 'default') {
+                    const permission = await Notification.requestPermission();
+                    notificationPermissionGranted = (permission === 'granted');
+                } else if (Notification.permission === 'granted') {
+                    notificationPermissionGranted = true;
+                }
+            }
+        }
+
+        // Show browser push notification
+        function showPushNotification(title, body, icon = '🔔') {
+            if (notificationPermissionGranted && 'Notification' in window) {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: icon,
+                    badge: icon,
+                    tag: 'merchant-support-' + Date.now(),
+                    requireInteraction: false,
+                    vibrate: [200, 100, 200]
+                });
+
+                notification.onclick = function() {
+                    window.focus();
+                    notification.close();
+                };
+
+                setTimeout(() => notification.close(), 5000);
+            }
+        }
+
+        // Play "Pop" notification sound (WhatsApp-style)
+        function playPopSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 1000;
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.15);
+            } catch (error) {
+                console.log('Audio playback error:', error);
+            }
+        }
 
         const loginContainer = document.getElementById('loginContainer');
         const dashboard = document.getElementById('dashboard');
@@ -745,7 +785,6 @@
         const inputContainer = document.getElementById('inputContainer');
         const activeTab = document.getElementById('activeTab');
         const archivedTab = document.getElementById('archivedTab');
-        const endChatBtn = document.getElementById('endChatBtn');
 
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
@@ -756,7 +795,9 @@
             userScrolledUp = !isAtBottom;
         });
 
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
+            await requestNotificationPermission();
+            
             const savedAdmin = localStorage.getItem('adminSession');
             if (savedAdmin) {
                 try {
@@ -787,38 +828,6 @@
             }, 5000);
         }
 
-        function playNotificationSound() {
-            try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.frequency.value = 800;
-                oscillator.type = 'sine';
-                
-                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.5);
-            } catch (error) {
-                console.log('Audio playback error:', error);
-            }
-        }
-
-        function showBrowserNotification(title, body) {
-            if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(title, {
-                    body: body,
-                    icon: '🔔',
-                    badge: '🔔'
-                });
-            }
-        }
-
         function scrollToBottom() {
             if (!userScrolledUp) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -828,29 +837,6 @@
         function getInitials(name) {
             return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         }
-
-        function endChatNotification() {
-            if (!currentSessionId) return;
-            
-            if (confirm('Send "Chat Ended" notification to customer? Customer can still message you.')) {
-                try {
-                    const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
-                    set(messageRef, {
-                        text: 'Chat session marked as completed by support agent. You can still continue messaging if needed.',
-                        type: 'notification',
-                        timestamp: serverTimestamp()
-                    });
-                    
-                    alert('Chat ended notification sent to customer.');
-                    setTimeout(scrollToBottom, 100);
-                } catch (error) {
-                    console.error('Error sending end chat notification:', error);
-                    showConnectionError();
-                }
-            }
-        }
-
-        endChatBtn.addEventListener('click', endChatNotification);
 
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -972,10 +958,11 @@
 
                     if (isNewCustomer && !notifiedCustomers.has(id)) {
                         notifiedCustomers.add(id);
-                        playNotificationSound();
-                        showBrowserNotification(
+                        playPopSound();
+                        showPushNotification(
                             '🆕 New Customer',
-                            `${session.customerName} just joined the chat!`
+                            `${session.customerName} just joined the chat!`,
+                            '👤'
                         );
                     }
 
@@ -986,10 +973,14 @@
                         if (lastMessageCounts[id] && messageCount > lastMessageCounts[id]) {
                             const lastMsg = messages ? Object.values(messages).pop() : null;
                             if (lastMsg && lastMsg.sender === 'customer' && id !== currentSessionId) {
-                                playNotificationSound();
-                                showBrowserNotification(
+                                playPopSound();
+                                const messagePreview = lastMsg.text.length > 50 
+                                    ? lastMsg.text.substring(0, 50) + '...' 
+                                    : lastMsg.text;
+                                showPushNotification(
                                     `Message from ${session.customerName}`,
-                                    lastMsg.text.substring(0, 50) + (lastMsg.text.length > 50 ? '...' : '')
+                                    messagePreview,
+                                    '💬'
                                 );
                             }
                         }
@@ -1099,15 +1090,6 @@
                     read: false
                 });
 
-                // Mark that admin has responded to this session
-                if (!adminHasResponded[currentSessionId]) {
-                    adminHasResponded[currentSessionId] = true;
-                    update(ref(database, `sessions/${currentSessionId}`), {
-                        agentResponded: true,
-                        agentRespondedAt: serverTimestamp()
-                    });
-                }
-
                 messageInput.value = '';
                 userScrolledUp = false;
                 stopTyping();
@@ -1165,7 +1147,7 @@
                 if (currentMessageCount > previousMessageCount && messages) {
                     const lastMsg = Object.values(messages).pop();
                     if (lastMsg && lastMsg.sender === 'customer') {
-                        playNotificationSound();
+                        playPopSound();
                     }
                 }
 
