@@ -331,17 +331,37 @@
             padding: 20px;
             background: white;
             border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .chat-header h3 {
+        .chat-header-info h3 {
             color: #333;
             margin-bottom: 5px;
             font-size: 16px;
         }
 
-        .chat-header p {
+        .chat-header-info p {
             color: #666;
             font-size: 13px;
+        }
+
+        .end-chat-btn {
+            padding: 8px 16px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            white-space: nowrap;
+        }
+
+        .end-chat-btn:hover {
+            background: #dc2626;
         }
 
         .messages-wrapper {
@@ -643,8 +663,11 @@
             
             <div id="chatContent" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="chat-header">
-                    <h3 id="customerNameHeader"></h3>
-                    <p id="customerEmailHeader"></p>
+                    <div class="chat-header-info">
+                        <h3 id="customerNameHeader"></h3>
+                        <p id="customerEmailHeader"></p>
+                    </div>
+                    <button class="end-chat-btn" id="endChatBtn">End Chat</button>
                 </div>
                 
                 <div class="messages-wrapper">
@@ -675,15 +698,15 @@
         import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
         const firebaseConfig = {
-    apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
-    authDomain: "support-chat-6391e.firebaseapp.com",
-    databaseURL: "https://support-chat-6391e-default-rtdb.firebaseio.com",
-    projectId: "support-chat-6391e",
-    storageBucket: "support-chat-6391e.firebasestorage.app",
-    messagingSenderId: "817965074720",
-    appId: "1:817965074720:web:365b7c175189150b11af45",
-    measurementId: "G-BBQ6TPTJW5"
-  };
+            // REPLACE THIS WITH YOUR FIREBASE CONFIG
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
         const ADMIN_CREDENTIALS = {
             username: 'admin',
@@ -881,6 +904,26 @@
             archivedTab.classList.add('active');
             activeTab.classList.remove('active');
             loadSessions();
+        });
+
+        const endChatBtn = document.getElementById('endChatBtn');
+        
+        endChatBtn.addEventListener('click', async () => {
+            if (!currentSessionId) return;
+            
+            if (confirm('End this chat? A closure message will be sent to the customer.')) {
+                try {
+                    const endRef = push(ref(database, `sessions/${currentSessionId}/messages`));
+                    await set(endRef, {
+                        type: 'ended',
+                        text: "This conversation has been ended. Feel free to message us again if you need further assistance.",
+                        timestamp: serverTimestamp()
+                    });
+                } catch (error) {
+                    console.error('Error ending chat:', error);
+                    showConnectionError();
+                }
+            }
         });
 
         function loadSessions() {
