@@ -770,7 +770,10 @@
     let showingArchived = false;
     let userScrolledUp = false;
     let notifiedCustomers = new Set();
+    let audioContext = null;
+    let notificationAudio = null;
 
+    // DOM Elements
     const loginContainer = document.getElementById('loginContainer');
     const dashboard = document.getElementById('dashboard');
     const loginForm = document.getElementById('loginForm');
@@ -792,67 +795,165 @@
     const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
     const endChatBtn = document.getElementById('endChatBtn');
 
-    // ==================== SIMPLE NOTIFICATION SYSTEM ====================
-    // This works even when tab is closed - uses Firebase Database + Page Title alerts
+    // ==================== MOBILE-FRIENDLY NOTIFICATIONS ====================
     
-    function setupSimpleNotifications() {
-        // Ask for permission when user clicks enable
-        enableNotificationsBtn.addEventListener('click', () => {
-            if ('Notification' in window) {
-                Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                        notificationBanner.classList.remove('show');
-                        console.log('Notifications enabled');
-                    }
-                });
+    function setupMobileNotifications() {
+        // Check if on mobile
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        // Mobile browsers block autoplay - we need user interaction first
+        if (isMobile) {
+            // Create a hidden button that user must click to enable sounds
+            const soundEnableBtn = document.createElement('button');
+            soundEnableBtn.id = 'soundEnableBtn';
+            soundEnableBtn.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: #666;
+                color: white;
+                border: none;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                font-size: 24px;
+                cursor: pointer;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                display: none;
+            `;
+            soundEnableBtn.innerHTML = '🔔';
+            soundEnableBtn.title = 'Enable notification sounds';
+            document.body.appendChild(soundEnableBtn);
+            
+            // Show the button if sounds aren't enabled yet
+            if (!localStorage.getItem('soundsEnabled')) {
+                soundEnableBtn.style.display = 'block';
             }
+            
+            soundEnableBtn.addEventListener('click', () => {
+                // Try to play a test sound
+                playMobileNotificationSound();
+                localStorage.setItem('soundsEnabled', 'true');
+                soundEnableBtn.style.display = 'none';
+                showInAppNotification('Sounds Enabled', 'Notification sounds are now active');
+            });
+        }
+        
+        // Setup notification permission
+        enableNotificationsBtn.addEventListener('click', () => {
+            requestNotificationPermission();
         });
         
-        // Check if we should show permission banner
-        if ('Notification' in window && Notification.permission === 'default') {
-            notificationBanner.classList.add('show');
+        // Check and show banner
+        checkNotificationPermission();
+    }
+    
+    function checkNotificationPermission() {
+        if ('Notification' in window) {
+            if (Notification.permission === 'default') {
+                notificationBanner.classList.add('show');
+            } else if (Notification.permission === 'granted') {
+                console.log('Notifications already enabled');
+            }
+        } else {
+            // Hide banner if notifications not supported
+            notificationBanner.style.display = 'none';
         }
     }
     
-    function sendAlertNotification(title, body, playSound = true) {
-        // 1. Play sound
-        if (playSound) {
-            playNotificationSound();
+    function requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            alert('Your browser does not support notifications');
+            return;
         }
         
-        // 2. Change page title for browser tab (works even when minimized)
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                notificationBanner.classList.remove('show');
+                showInAppNotification('Notifications Enabled', 'You will now receive alerts for new messages');
+                
+                // Also enable sounds on mobile
+                if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                    localStorage.setItem('soundsEnabled', 'true');
+                }
+            } else if (permission === 'denied') {
+                showInAppNotification('Notifications Blocked', 'Please enable notifications in browser settings');
+            }
+        });
+    }
+    
+    function sendAlertNotification(title, body) {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        // 1. Play sound (works differently on mobile)
+        playNotificationSound();
+        
+        // 2. Change page title (works on all devices when tab is not active)
         if (!document.hasFocus()) {
             const originalTitle = document.title;
-            document.title = `🔔 ${title} - Shopify Admin`;
+            document.title = `🔔 ${title}`;
             
-            // Revert after 3 seconds
-            setTimeout(() => {
-                document.title = originalTitle;
-            }, 3000);
+            // Blink the title for attention
+            let blinkCount = 0;
+            const blinkInterval = setInterval(() => {
+                document.title = document.title.includes('🔔') ? originalTitle : `🔔 ${title}`;
+                blinkCount++;
+                if (blinkCount >= 6) { // Blink 3 times
+                    clearInterval(blinkInterval);
+                    document.title = originalTitle;
+                }
+            }, 500);
         }
         
-        // 3. Show browser notification if allowed
+        // 3. Show browser notification if allowed (may not work on mobile Safari)
         if ('Notification' in window && Notification.permission === 'granted') {
-            const notification = new Notification(title, {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
-                tag: 'chat-notification'
-            });
-            
-            notification.onclick = () => {
-                window.focus();
-                notification.close();
-            };
+            try {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
+                    badge: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
+                    tag: 'chat-' + Date.now() // Unique tag for each notification
+                });
+                
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+            } catch (error) {
+                console.log('Browser notification failed:', error);
+            }
         }
         
-        // 4. Show in-app notification (always works)
+        // 4. Show in-app notification (ALWAYS WORKS)
         showInAppNotification(title, body);
+        
+        // 5. Vibrate if on mobile and supported
+        if (isMobile && 'vibrate' in navigator) {
+            try {
+                navigator.vibrate([200, 100, 200]); // Vibrate pattern
+            } catch (e) {
+                // Vibration not supported
+            }
+        }
     }
     
     function playNotificationSound() {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            playMobileNotificationSound();
+        } else {
+            playDesktopNotificationSound();
+        }
+    }
+    
+    function playDesktopNotificationSound() {
         try {
-            // Simple beep sound
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
             
@@ -868,13 +969,48 @@
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + 0.5);
         } catch (error) {
-            console.log('Audio error:', error);
+            console.log('Desktop sound error:', error);
+        }
+    }
+    
+    function playMobileNotificationSound() {
+        // On mobile, we need user interaction first and use HTML5 Audio
+        const soundsEnabled = localStorage.getItem('soundsEnabled') === 'true';
+        
+        if (!soundsEnabled) {
+            return; // Don't play sound until user enables it
+        }
+        
+        try {
+            // Create audio element
+            if (!notificationAudio) {
+                notificationAudio = new Audio();
+                
+                // Create a simple beep using data URL (no external file needed)
+                const beepSound = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ" +
+                    "CAAAAA//8AAP//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+                
+                notificationAudio.src = beepSound;
+                notificationAudio.volume = 0.5;
+            }
+            
+            // Play the sound
+            notificationAudio.currentTime = 0;
+            notificationAudio.play().catch(error => {
+                console.log('Mobile sound play failed:', error);
+                // User might need to interact first
+            });
+        } catch (error) {
+            console.log('Mobile sound error:', error);
         }
     }
     
     function showInAppNotification(title, message) {
         // Create notification element
         const notificationEl = document.createElement('div');
+        notificationEl.className = 'in-app-notification';
         notificationEl.style.cssText = `
             position: fixed;
             top: 20px;
@@ -905,6 +1041,12 @@
             notificationEl.style.animation = 'slideOut 0.3s ease-out';
             setTimeout(() => notificationEl.remove(), 300);
         }, 5000);
+        
+        // Also remove on click
+        notificationEl.addEventListener('click', () => {
+            notificationEl.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => notificationEl.remove(), 300);
+        });
     }
     
     // Add CSS for notifications
@@ -918,9 +1060,77 @@
             from { transform: translateX(0); opacity: 1; }
             to { transform: translateX(100%); opacity: 0; }
         }
+        
+        /* Mobile-specific styles */
+        @media (max-width: 768px) {
+            .in-app-notification {
+                top: 10px !important;
+                right: 10px !important;
+                left: 10px !important;
+                max-width: none !important;
+            }
+            
+            #soundEnableBtn {
+                bottom: 80px !important; /* Above input field */
+            }
+        }
     `;
     document.head.appendChild(style);
     
+    // ==================== NOTIFICATION LISTENER ====================
+    
+    function setupNotificationListener() {
+        // Listen for new customer sessions
+        const sessionsRef = ref(database, 'sessions');
+        onValue(sessionsRef, (snapshot) => {
+            const sessions = snapshot.val();
+            if (!sessions) return;
+
+            Object.entries(sessions).forEach(([id, session]) => {
+                if (session.newCustomer && !notifiedCustomers.has(id)) {
+                    notifiedCustomers.add(id);
+                    
+                    // Send notification
+                    sendAlertNotification(
+                        '🆕 New Customer',
+                        `${session.customerName} just joined the chat!`
+                    );
+                }
+            });
+        });
+
+        // Listen for new messages
+        const allMessagesRef = ref(database, 'sessions');
+        onValue(allMessagesRef, (snapshot) => {
+            const sessions = snapshot.val();
+            if (!sessions) return;
+
+            Object.entries(sessions).forEach(([sessionId, session]) => {
+                if (session.messages) {
+                    const messageCount = Object.keys(session.messages).length;
+                    
+                    if (lastMessageCounts[sessionId] && messageCount > lastMessageCounts[sessionId]) {
+                        const messages = session.messages;
+                        const messageKeys = Object.keys(messages);
+                        const lastMsgKey = messageKeys[messageKeys.length - 1];
+                        const lastMsg = messages[lastMsgKey];
+                        
+                        // Only notify for customer messages when not in current session
+                        if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
+                            sendAlertNotification(
+                                `💬 ${session.customerName}`,
+                                lastMsg.text.substring(0, 60) + (lastMsg.text.length > 60 ? '...' : '')
+                            );
+                        }
+                    }
+                    lastMessageCounts[sessionId] = messageCount;
+                } else {
+                    lastMessageCounts[sessionId] = 0;
+                }
+            });
+        });
+    }
+
     // ==================== CORE FUNCTIONS ====================
     
     messagesContainer.addEventListener('scroll', () => {
@@ -929,8 +1139,8 @@
     });
 
     window.addEventListener('load', () => {
-        // Setup notifications
-        setupSimpleNotifications();
+        // Setup mobile-friendly notifications
+        setupMobileNotifications();
         
         // Check saved session
         const savedAdmin = localStorage.getItem('adminSession');
@@ -946,6 +1156,7 @@
                     loginContainer.style.display = 'none';
                     dashboard.classList.add('active');
                     loadSessions();
+                    setupNotificationListener();
                 } else {
                     localStorage.removeItem('adminSession');
                 }
@@ -970,59 +1181,6 @@
 
     function getInitials(name) {
         return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-    }
-
-    // ==================== NOTIFICATION LISTENER ====================
-    
-    function setupNotificationListener() {
-        // Listen for new customer sessions
-        const sessionsRef = ref(database, 'sessions');
-        onValue(sessionsRef, (snapshot) => {
-            const sessions = snapshot.val();
-            if (!sessions) return;
-
-            Object.entries(sessions).forEach(([id, session]) => {
-                if (session.newCustomer && !notifiedCustomers.has(id)) {
-                    notifiedCustomers.add(id);
-                    
-                    // Send notification
-                    sendAlertNotification(
-                        '🆕 New Customer',
-                        `${session.customerName} just joined the chat!`
-                    );
-                }
-            });
-        });
-
-        // Listen for new messages in all sessions
-        const allMessagesRef = ref(database, 'sessions');
-        onValue(allMessagesRef, (snapshot) => {
-            const sessions = snapshot.val();
-            if (!sessions) return;
-
-            Object.entries(sessions).forEach(([sessionId, session]) => {
-                if (session.messages) {
-                    const messageCount = Object.keys(session.messages).length;
-                    
-                    if (lastMessageCounts[sessionId] && messageCount > lastMessageCounts[sessionId]) {
-                        const messages = session.messages;
-                        const lastMsgKey = Object.keys(messages).pop();
-                        const lastMsg = messages[lastMsgKey];
-                        
-                        // Only notify for customer messages when not in current session
-                        if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
-                            sendAlertNotification(
-                                `💬 New message from ${session.customerName}`,
-                                lastMsg.text.substring(0, 60) + (lastMsg.text.length > 60 ? '...' : '')
-                            );
-                        }
-                    }
-                    lastMessageCounts[sessionId] = messageCount;
-                } else {
-                    lastMessageCounts[sessionId] = 0;
-                }
-            });
-        });
     }
 
     // ==================== EVENT LISTENERS ====================
@@ -1065,11 +1223,9 @@
             loadSessions();
             setupNotificationListener();
             
-            // Show notification banner if needed
+            // Check notification permission after login
             setTimeout(() => {
-                if ('Notification' in window && Notification.permission === 'default') {
-                    notificationBanner.classList.add('show');
-                }
+                checkNotificationPermission();
             }, 1000);
         } else {
             errorMessage.classList.add('show');
