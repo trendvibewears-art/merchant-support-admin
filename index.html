@@ -752,7 +752,8 @@
     };
 
     let app, database;
-    let audioContext = null;
+    let notificationAudio = null;
+    let isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     try {
         app = initializeApp(firebaseConfig);
@@ -771,7 +772,6 @@
     let showingArchived = false;
     let userScrolledUp = false;
     let notifiedCustomers = new Set();
-    let notificationAudio = null;
 
     // DOM Elements
     const loginContainer = document.getElementById('loginContainer');
@@ -795,10 +795,81 @@
     const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
     const endChatBtn = document.getElementById('endChatBtn');
 
-    // ==================== REAL BROWSER NOTIFICATIONS ====================
+    // ==================== PWA INSTALL PROMPT ====================
     
-    function setupRealNotifications() {
-        console.log('Setting up real notifications...');
+    let deferredPrompt;
+    let installButton = null;
+    
+    function setupPWA() {
+        // Create install button for mobile
+        if (isMobile) {
+            installButton = document.createElement('button');
+            installButton.id = 'installPWA';
+            installButton.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                background: #666;
+                color: white;
+                border: none;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                font-size: 24px;
+                cursor: pointer;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                display: none;
+            `;
+            installButton.innerHTML = '📱';
+            installButton.title = 'Install App for notifications';
+            document.body.appendChild(installButton);
+            
+            installButton.addEventListener('click', () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then((choiceResult) => {
+                        if (choiceResult.outcome === 'accepted') {
+                            console.log('User installed the PWA');
+                            installButton.style.display = 'none';
+                            showInAppNotification('App Installed', 'You will now receive notifications even when closed');
+                        }
+                        deferredPrompt = null;
+                    });
+                }
+            });
+        }
+        
+        // Listen for install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            if (installButton) {
+                installButton.style.display = 'block';
+            }
+        });
+        
+        // Check if already installed
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA was installed');
+            if (installButton) {
+                installButton.style.display = 'none';
+            }
+            deferredPrompt = null;
+        });
+        
+        // Check if running as PWA
+        if (window.matchMedia('(display-mode: standalone)').matches || 
+            window.navigator.standalone === true) {
+            console.log('Running as PWA');
+        }
+    }
+    
+    // ==================== REAL NOTIFICATIONS FOR MOBILE ====================
+    
+    function setupMobileNotifications() {
+        console.log('Setting up mobile notifications...');
         
         // Check if notifications are supported
         if (!('Notification' in window)) {
@@ -808,29 +879,79 @@
         }
         
         // Check current permission
-        if (Notification.permission === 'granted') {
-            console.log('Notifications already enabled');
-            notificationBanner.classList.remove('show');
-        } else if (Notification.permission === 'denied') {
-            console.log('Notifications blocked by user');
-            notificationBanner.style.display = 'none';
-        } else {
-            // Default - show banner to ask for permission
-            console.log('Notification permission not set yet');
-            notificationBanner.classList.add('show');
-        }
+        checkNotificationPermission();
         
         // Enable button click handler
         enableNotificationsBtn.addEventListener('click', () => {
             requestNotificationPermission();
         });
         
-        // Setup sound system
-        setupSoundSystem();
+        // Setup sound (mobile requires user interaction)
+        setupSound();
+    }
+    
+    function checkNotificationPermission() {
+        if (Notification.permission === 'granted') {
+            console.log('Notifications already enabled');
+            notificationBanner.classList.remove('show');
+        } else if (Notification.permission === 'denied') {
+            console.log('Notifications blocked by user');
+            notificationBanner.style.display = 'none';
+            
+            // Show instructions for mobile
+            if (isMobile) {
+                showMobileInstructions();
+            }
+        } else {
+            // Default - show banner
+            notificationBanner.classList.add('show');
+        }
+    }
+    
+    function showMobileInstructions() {
+        const instructions = document.createElement('div');
+        instructions.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10000;
+            max-width: 300px;
+            text-align: center;
+        `;
+        
+        instructions.innerHTML = `
+            <h3>📱 Mobile Notifications</h3>
+            <p>For notifications on mobile:</p>
+            <ol style="text-align: left; padding-left: 20px;">
+                <li>Tap "Install" button (bottom-left)</li>
+                <li>Add to home screen</li>
+                <li>Open from home screen</li>
+                <li>Allow notifications when asked</li>
+            </ol>
+            <button id="closeInstructions" style="margin-top: 15px; padding: 8px 16px; background: #666; color: white; border: none; border-radius: 5px;">Got it</button>
+        `;
+        
+        document.body.appendChild(instructions);
+        
+        document.getElementById('closeInstructions').addEventListener('click', () => {
+            instructions.remove();
+        });
     }
     
     function requestNotificationPermission() {
         console.log('Requesting notification permission...');
+        
+        // On mobile, guide user to install PWA first
+        if (isMobile && !(window.matchMedia('(display-mode: standalone)').matches) && 
+            window.navigator.standalone !== true) {
+            alert('For mobile notifications, please install the app first. Tap the 📱 button in bottom-left corner.');
+            return;
+        }
         
         Notification.requestPermission().then(permission => {
             console.log('Notification permission:', permission);
@@ -841,12 +962,9 @@
                 // Show test notification
                 showRealNotification(
                     '✅ Notifications Enabled',
-                    'You will now receive alerts for new customers and messages',
+                    'You will now receive alerts even when app is closed',
                     true
                 );
-                
-                // Enable sound
-                enableSound();
                 
             } else if (permission === 'denied') {
                 alert('Notifications blocked. Please enable them in your browser settings.');
@@ -857,51 +975,42 @@
         });
     }
     
-    function setupSoundSystem() {
-        // Create audio for notification sound
+    function setupSound() {
+        // Create simple beep sound for mobile
         notificationAudio = new Audio();
         
-        // Simple notification sound (beep)
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.value = 800;
-        oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
-        
-        // Convert to blob for audio element
-        audioContext.startRendering().then(renderedBuffer => {
-            const wav = audioContext.createBuffer(1, renderedBuffer.length, audioContext.sampleRate);
-            wav.getChannelData(0).set(renderedBuffer.getChannelData(0));
+        // Create a beep sound using Web Audio API
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
             
-            const blob = new Blob([wav], { type: 'audio/wav' });
-            notificationAudio.src = URL.createObjectURL(blob);
-            notificationAudio.volume = 0.5;
-        });
-    }
-    
-    function enableSound() {
-        // On mobile, we need user interaction first
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        
-        if (isMobile && notificationAudio) {
-            // Play and immediately pause to "prime" the audio
-            notificationAudio.play().then(() => {
-                notificationAudio.pause();
-                notificationAudio.currentTime = 0;
-            }).catch(error => {
-                console.log('Audio priming failed:', error);
-            });
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+            
+            // For mobile, we'll use a simple approach
+            if (isMobile) {
+                // Use a simple beep that works on mobile
+                notificationAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ" +
+                    "CAAAAA//8AAP//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+            }
+            
+        } catch (error) {
+            console.log('Audio setup error:', error);
         }
+        
+        notificationAudio.volume = 0.5;
     }
     
     function playNotificationSound() {
@@ -910,7 +1019,7 @@
         try {
             notificationAudio.currentTime = 0;
             notificationAudio.play().catch(error => {
-                console.log('Sound play failed (user interaction required):', error);
+                console.log('Sound play failed:', error);
             });
         } catch (error) {
             console.log('Sound error:', error);
@@ -918,9 +1027,9 @@
     }
     
     function showRealNotification(title, body, isTest = false) {
-        console.log('Showing real notification:', title, body);
+        console.log('Showing notification:', title);
         
-        // 1. Play sound (if not test notification)
+        // 1. Play sound (if not test)
         if (!isTest) {
             playNotificationSound();
         }
@@ -941,61 +1050,58 @@
             }, 500);
         }
         
-        // 3. SHOW REAL BROWSER NOTIFICATION (This appears outside browser)
+        // 3. SHOW REAL BROWSER NOTIFICATION
         if (Notification.permission === 'granted') {
             try {
-                const notification = new Notification(title, {
+                const options = {
                     body: body,
-                    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png', // Shopify icon
+                    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
                     badge: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
-                    tag: 'chat-' + Date.now(), // Unique tag
+                    tag: 'chat-' + Date.now(),
                     requireInteraction: false,
                     silent: false
-                });
+                };
                 
-                console.log('Browser notification created successfully');
+                // On mobile PWA, add vibration
+                if (isMobile && 'vibrate' in navigator) {
+                    navigator.vibrate([200, 100, 200]);
+                }
+                
+                const notification = new Notification(title, options);
+                
+                console.log('Browser notification created');
                 
                 // Notification click handler
                 notification.onclick = () => {
-                    console.log('Notification clicked');
                     window.focus();
                     
-                    // If there's a specific session, select it
-                    if (currentSessionId) {
-                        document.getElementById('customerNameHeader').scrollIntoView();
+                    // Try to bring app to foreground
+                    if (isMobile) {
+                        // On mobile, we can't do much more
+                        window.location.href = window.location.origin;
                     }
                     
                     notification.close();
                 };
                 
-                // Auto-close after 10 seconds
+                // Auto-close
                 setTimeout(() => {
                     notification.close();
                 }, 10000);
                 
             } catch (error) {
-                console.error('Failed to create browser notification:', error);
-                // Fallback to in-app notification
+                console.error('Failed to create notification:', error);
+                // Fallback
                 showInAppNotification(title, body);
             }
         } else {
-            // Fallback to in-app notification
-            console.log('Browser notifications not permitted, showing in-app');
+            // Fallback
             showInAppNotification(title, body);
-        }
-        
-        // 4. Vibrate if on mobile
-        if ('vibrate' in navigator) {
-            try {
-                navigator.vibrate([200, 100, 200]);
-            } catch (e) {
-                // Vibration not supported
-            }
         }
     }
     
     function showInAppNotification(title, message) {
-        // Create in-app notification (fallback)
+        // Create in-app notification
         const notificationEl = document.createElement('div');
         notificationEl.className = 'in-app-notification';
         notificationEl.style.cssText = `
@@ -1038,7 +1144,7 @@
         }, 5000);
     }
     
-    // Add CSS for notifications
+    // Add CSS
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideIn {
@@ -1056,6 +1162,10 @@
                 right: 10px !important;
                 left: 10px !important;
                 max-width: none !important;
+            }
+            
+            #installPWA {
+                bottom: 80px !important;
             }
         }
     `;
@@ -1076,7 +1186,7 @@
                 if (session.newCustomer && !notifiedCustomers.has(id)) {
                     notifiedCustomers.add(id);
                     
-                    // Send REAL BROWSER NOTIFICATION
+                    // Send notification
                     showRealNotification(
                         '🆕 New Customer',
                         `${session.customerName} just joined the chat!`
@@ -1085,7 +1195,7 @@
             });
         });
 
-        // Listen for new messages in all sessions
+        // Listen for new messages
         const allMessagesRef = ref(database, 'sessions');
         onValue(allMessagesRef, (snapshot) => {
             const sessions = snapshot.val();
@@ -1101,7 +1211,6 @@
                         const lastMsgKey = messageKeys[messageKeys.length - 1];
                         const lastMsg = messages[lastMsgKey];
                         
-                        // Only notify for customer messages when not in current session
                         if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
                             showRealNotification(
                                 `💬 ${session.customerName}`,
@@ -1127,8 +1236,11 @@
     window.addEventListener('load', () => {
         console.log('Admin dashboard loading...');
         
-        // Setup notifications FIRST
-        setupRealNotifications();
+        // Setup PWA first (for mobile)
+        setupPWA();
+        
+        // Setup notifications
+        setupMobileNotifications();
         
         // Check saved session
         const savedAdmin = localStorage.getItem('adminSession');
@@ -1213,9 +1325,7 @@
             
             // Show notification banner if needed
             setTimeout(() => {
-                if ('Notification' in window && Notification.permission === 'default') {
-                    notificationBanner.classList.add('show');
-                }
+                checkNotificationPermission();
             }, 1000);
         } else {
             errorMessage.classList.add('show');
