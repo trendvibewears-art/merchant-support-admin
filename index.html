@@ -752,6 +752,7 @@
     };
 
     let app, database;
+    let audioContext = null;
     
     try {
         app = initializeApp(firebaseConfig);
@@ -770,7 +771,6 @@
     let showingArchived = false;
     let userScrolledUp = false;
     let notifiedCustomers = new Set();
-    let audioContext = null;
     let notificationAudio = null;
 
     // DOM Elements
@@ -795,220 +795,207 @@
     const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
     const endChatBtn = document.getElementById('endChatBtn');
 
-    // ==================== MOBILE-FRIENDLY NOTIFICATIONS ====================
+    // ==================== REAL BROWSER NOTIFICATIONS ====================
     
-    function setupMobileNotifications() {
-        // Check if on mobile
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    function setupRealNotifications() {
+        console.log('Setting up real notifications...');
         
-        // Mobile browsers block autoplay - we need user interaction first
-        if (isMobile) {
-            // Create a hidden button that user must click to enable sounds
-            const soundEnableBtn = document.createElement('button');
-            soundEnableBtn.id = 'soundEnableBtn';
-            soundEnableBtn.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: #666;
-                color: white;
-                border: none;
-                border-radius: 50%;
-                width: 50px;
-                height: 50px;
-                font-size: 24px;
-                cursor: pointer;
-                z-index: 10000;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                display: none;
-            `;
-            soundEnableBtn.innerHTML = '🔔';
-            soundEnableBtn.title = 'Enable notification sounds';
-            document.body.appendChild(soundEnableBtn);
-            
-            // Show the button if sounds aren't enabled yet
-            if (!localStorage.getItem('soundsEnabled')) {
-                soundEnableBtn.style.display = 'block';
-            }
-            
-            soundEnableBtn.addEventListener('click', () => {
-                // Try to play a test sound
-                playMobileNotificationSound();
-                localStorage.setItem('soundsEnabled', 'true');
-                soundEnableBtn.style.display = 'none';
-                showInAppNotification('Sounds Enabled', 'Notification sounds are now active');
-            });
+        // Check if notifications are supported
+        if (!('Notification' in window)) {
+            console.log('This browser does not support notifications');
+            notificationBanner.style.display = 'none';
+            return;
         }
         
-        // Setup notification permission
+        // Check current permission
+        if (Notification.permission === 'granted') {
+            console.log('Notifications already enabled');
+            notificationBanner.classList.remove('show');
+        } else if (Notification.permission === 'denied') {
+            console.log('Notifications blocked by user');
+            notificationBanner.style.display = 'none';
+        } else {
+            // Default - show banner to ask for permission
+            console.log('Notification permission not set yet');
+            notificationBanner.classList.add('show');
+        }
+        
+        // Enable button click handler
         enableNotificationsBtn.addEventListener('click', () => {
             requestNotificationPermission();
         });
         
-        // Check and show banner
-        checkNotificationPermission();
-    }
-    
-    function checkNotificationPermission() {
-        if ('Notification' in window) {
-            if (Notification.permission === 'default') {
-                notificationBanner.classList.add('show');
-            } else if (Notification.permission === 'granted') {
-                console.log('Notifications already enabled');
-            }
-        } else {
-            // Hide banner if notifications not supported
-            notificationBanner.style.display = 'none';
-        }
+        // Setup sound system
+        setupSoundSystem();
     }
     
     function requestNotificationPermission() {
-        if (!('Notification' in window)) {
-            alert('Your browser does not support notifications');
-            return;
-        }
+        console.log('Requesting notification permission...');
         
         Notification.requestPermission().then(permission => {
+            console.log('Notification permission:', permission);
+            
             if (permission === 'granted') {
                 notificationBanner.classList.remove('show');
-                showInAppNotification('Notifications Enabled', 'You will now receive alerts for new messages');
                 
-                // Also enable sounds on mobile
-                if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-                    localStorage.setItem('soundsEnabled', 'true');
-                }
+                // Show test notification
+                showRealNotification(
+                    '✅ Notifications Enabled',
+                    'You will now receive alerts for new customers and messages',
+                    true
+                );
+                
+                // Enable sound
+                enableSound();
+                
             } else if (permission === 'denied') {
-                showInAppNotification('Notifications Blocked', 'Please enable notifications in browser settings');
+                alert('Notifications blocked. Please enable them in your browser settings.');
+                notificationBanner.style.display = 'none';
             }
+        }).catch(error => {
+            console.error('Error requesting notification permission:', error);
         });
     }
     
-    function sendAlertNotification(title, body) {
+    function setupSoundSystem() {
+        // Create audio for notification sound
+        notificationAudio = new Audio();
+        
+        // Simple notification sound (beep)
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+        
+        // Convert to blob for audio element
+        audioContext.startRendering().then(renderedBuffer => {
+            const wav = audioContext.createBuffer(1, renderedBuffer.length, audioContext.sampleRate);
+            wav.getChannelData(0).set(renderedBuffer.getChannelData(0));
+            
+            const blob = new Blob([wav], { type: 'audio/wav' });
+            notificationAudio.src = URL.createObjectURL(blob);
+            notificationAudio.volume = 0.5;
+        });
+    }
+    
+    function enableSound() {
+        // On mobile, we need user interaction first
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         
-        // 1. Play sound (works differently on mobile)
-        playNotificationSound();
+        if (isMobile && notificationAudio) {
+            // Play and immediately pause to "prime" the audio
+            notificationAudio.play().then(() => {
+                notificationAudio.pause();
+                notificationAudio.currentTime = 0;
+            }).catch(error => {
+                console.log('Audio priming failed:', error);
+            });
+        }
+    }
+    
+    function playNotificationSound() {
+        if (!notificationAudio) return;
         
-        // 2. Change page title (works on all devices when tab is not active)
+        try {
+            notificationAudio.currentTime = 0;
+            notificationAudio.play().catch(error => {
+                console.log('Sound play failed (user interaction required):', error);
+            });
+        } catch (error) {
+            console.log('Sound error:', error);
+        }
+    }
+    
+    function showRealNotification(title, body, isTest = false) {
+        console.log('Showing real notification:', title, body);
+        
+        // 1. Play sound (if not test notification)
+        if (!isTest) {
+            playNotificationSound();
+        }
+        
+        // 2. Change page title for browser tab attention
         if (!document.hasFocus()) {
             const originalTitle = document.title;
-            document.title = `🔔 ${title}`;
-            
-            // Blink the title for attention
             let blinkCount = 0;
+            
             const blinkInterval = setInterval(() => {
                 document.title = document.title.includes('🔔') ? originalTitle : `🔔 ${title}`;
                 blinkCount++;
-                if (blinkCount >= 6) { // Blink 3 times
+                
+                if (blinkCount >= 6) {
                     clearInterval(blinkInterval);
                     document.title = originalTitle;
                 }
             }, 500);
         }
         
-        // 3. Show browser notification if allowed (may not work on mobile Safari)
-        if ('Notification' in window && Notification.permission === 'granted') {
+        // 3. SHOW REAL BROWSER NOTIFICATION (This appears outside browser)
+        if (Notification.permission === 'granted') {
             try {
                 const notification = new Notification(title, {
                     body: body,
-                    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
+                    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png', // Shopify icon
                     badge: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
-                    tag: 'chat-' + Date.now() // Unique tag for each notification
+                    tag: 'chat-' + Date.now(), // Unique tag
+                    requireInteraction: false,
+                    silent: false
                 });
                 
+                console.log('Browser notification created successfully');
+                
+                // Notification click handler
                 notification.onclick = () => {
+                    console.log('Notification clicked');
                     window.focus();
+                    
+                    // If there's a specific session, select it
+                    if (currentSessionId) {
+                        document.getElementById('customerNameHeader').scrollIntoView();
+                    }
+                    
                     notification.close();
                 };
+                
+                // Auto-close after 10 seconds
+                setTimeout(() => {
+                    notification.close();
+                }, 10000);
+                
             } catch (error) {
-                console.log('Browser notification failed:', error);
+                console.error('Failed to create browser notification:', error);
+                // Fallback to in-app notification
+                showInAppNotification(title, body);
             }
+        } else {
+            // Fallback to in-app notification
+            console.log('Browser notifications not permitted, showing in-app');
+            showInAppNotification(title, body);
         }
         
-        // 4. Show in-app notification (ALWAYS WORKS)
-        showInAppNotification(title, body);
-        
-        // 5. Vibrate if on mobile and supported
-        if (isMobile && 'vibrate' in navigator) {
+        // 4. Vibrate if on mobile
+        if ('vibrate' in navigator) {
             try {
-                navigator.vibrate([200, 100, 200]); // Vibrate pattern
+                navigator.vibrate([200, 100, 200]);
             } catch (e) {
                 // Vibration not supported
             }
         }
     }
     
-    function playNotificationSound() {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        
-        if (isMobile) {
-            playMobileNotificationSound();
-        } else {
-            playDesktopNotificationSound();
-        }
-    }
-    
-    function playDesktopNotificationSound() {
-        try {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
-            
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } catch (error) {
-            console.log('Desktop sound error:', error);
-        }
-    }
-    
-    function playMobileNotificationSound() {
-        // On mobile, we need user interaction first and use HTML5 Audio
-        const soundsEnabled = localStorage.getItem('soundsEnabled') === 'true';
-        
-        if (!soundsEnabled) {
-            return; // Don't play sound until user enables it
-        }
-        
-        try {
-            // Create audio element
-            if (!notificationAudio) {
-                notificationAudio = new Audio();
-                
-                // Create a simple beep using data URL (no external file needed)
-                const beepSound = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ" +
-                    "CAAAAA//8AAP//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-                
-                notificationAudio.src = beepSound;
-                notificationAudio.volume = 0.5;
-            }
-            
-            // Play the sound
-            notificationAudio.currentTime = 0;
-            notificationAudio.play().catch(error => {
-                console.log('Mobile sound play failed:', error);
-                // User might need to interact first
-            });
-        } catch (error) {
-            console.log('Mobile sound error:', error);
-        }
-    }
-    
     function showInAppNotification(title, message) {
-        // Create notification element
+        // Create in-app notification (fallback)
         const notificationEl = document.createElement('div');
         notificationEl.className = 'in-app-notification';
         notificationEl.style.cssText = `
@@ -1024,6 +1011,7 @@
             animation: slideIn 0.3s ease-out;
             border-left: 4px solid #666;
             font-family: inherit;
+            cursor: pointer;
         `;
         
         notificationEl.innerHTML = `
@@ -1034,19 +1022,20 @@
             <div style="font-size: 13px; color: #666;">${message}</div>
         `;
         
-        document.body.appendChild(notificationEl);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            notificationEl.style.animation = 'slideOut 0.3s ease-out';
-            setTimeout(() => notificationEl.remove(), 300);
-        }, 5000);
-        
-        // Also remove on click
         notificationEl.addEventListener('click', () => {
             notificationEl.style.animation = 'slideOut 0.3s ease-out';
             setTimeout(() => notificationEl.remove(), 300);
         });
+        
+        document.body.appendChild(notificationEl);
+        
+        // Auto-remove
+        setTimeout(() => {
+            if (notificationEl.parentNode) {
+                notificationEl.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => notificationEl.remove(), 300);
+            }
+        }, 5000);
     }
     
     // Add CSS for notifications
@@ -1061,17 +1050,12 @@
             to { transform: translateX(100%); opacity: 0; }
         }
         
-        /* Mobile-specific styles */
         @media (max-width: 768px) {
             .in-app-notification {
                 top: 10px !important;
                 right: 10px !important;
                 left: 10px !important;
                 max-width: none !important;
-            }
-            
-            #soundEnableBtn {
-                bottom: 80px !important; /* Above input field */
             }
         }
     `;
@@ -1080,6 +1064,8 @@
     // ==================== NOTIFICATION LISTENER ====================
     
     function setupNotificationListener() {
+        console.log('Setting up notification listener...');
+        
         // Listen for new customer sessions
         const sessionsRef = ref(database, 'sessions');
         onValue(sessionsRef, (snapshot) => {
@@ -1090,8 +1076,8 @@
                 if (session.newCustomer && !notifiedCustomers.has(id)) {
                     notifiedCustomers.add(id);
                     
-                    // Send notification
-                    sendAlertNotification(
+                    // Send REAL BROWSER NOTIFICATION
+                    showRealNotification(
                         '🆕 New Customer',
                         `${session.customerName} just joined the chat!`
                     );
@@ -1099,7 +1085,7 @@
             });
         });
 
-        // Listen for new messages
+        // Listen for new messages in all sessions
         const allMessagesRef = ref(database, 'sessions');
         onValue(allMessagesRef, (snapshot) => {
             const sessions = snapshot.val();
@@ -1117,9 +1103,9 @@
                         
                         // Only notify for customer messages when not in current session
                         if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
-                            sendAlertNotification(
+                            showRealNotification(
                                 `💬 ${session.customerName}`,
-                                lastMsg.text.substring(0, 60) + (lastMsg.text.length > 60 ? '...' : '')
+                                lastMsg.text.substring(0, 80) + (lastMsg.text.length > 80 ? '...' : '')
                             );
                         }
                     }
@@ -1139,8 +1125,10 @@
     });
 
     window.addEventListener('load', () => {
-        // Setup mobile-friendly notifications
-        setupMobileNotifications();
+        console.log('Admin dashboard loading...');
+        
+        // Setup notifications FIRST
+        setupRealNotifications();
         
         // Check saved session
         const savedAdmin = localStorage.getItem('adminSession');
@@ -1197,7 +1185,7 @@
                     timestamp: serverTimestamp()
                 });
                 
-                showInAppNotification('Chat Ended', 'Notification sent to customer');
+                showRealNotification('Chat Ended', 'Notification sent to customer');
                 setTimeout(scrollToBottom, 100);
             } catch (error) {
                 console.error('Error sending end chat notification:', error);
@@ -1223,9 +1211,11 @@
             loadSessions();
             setupNotificationListener();
             
-            // Check notification permission after login
+            // Show notification banner if needed
             setTimeout(() => {
-                checkNotificationPermission();
+                if ('Notification' in window && Notification.permission === 'default') {
+                    notificationBanner.classList.add('show');
+                }
             }, 1000);
         } else {
             errorMessage.classList.add('show');
