@@ -745,9 +745,10 @@
     appId: "1:817965074720:web:365b7c175189150b11af45",
     measurementId: "G-BBQ6TPTJW5"
   };
+
         const ADMIN_CREDENTIALS = {
             username: 'admin',
-            password: 'admin123' // CHANGE THIS PASSWORD!
+            password: 'admin123'
         };
 
         let app, database;
@@ -769,64 +770,6 @@
         let showingArchived = false;
         let userScrolledUp = false;
         let notifiedCustomers = new Set();
-        let notificationPermissionGranted = false;
-
-        // Request notification permission
-        async function requestNotificationPermission() {
-            if ('Notification' in window) {
-                if (Notification.permission === 'default') {
-                    const permission = await Notification.requestPermission();
-                    notificationPermissionGranted = (permission === 'granted');
-                } else if (Notification.permission === 'granted') {
-                    notificationPermissionGranted = true;
-                }
-            }
-        }
-
-        // Show browser push notification
-        function showPushNotification(title, body, icon = '🔔') {
-            if (notificationPermissionGranted && 'Notification' in window) {
-                const notification = new Notification(title, {
-                    body: body,
-                    icon: icon,
-                    badge: icon,
-                    tag: 'merchant-support-' + Date.now(),
-                    requireInteraction: false,
-                    vibrate: [200, 100, 200]
-                });
-
-                notification.onclick = function() {
-                    window.focus();
-                    notification.close();
-                };
-
-                setTimeout(() => notification.close(), 5000);
-            }
-        }
-
-        // Play "Pop" notification sound (WhatsApp-style)
-        function playPopSound() {
-            try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.frequency.value = 1000;
-                oscillator.type = 'sine';
-                
-                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-                
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.15);
-            } catch (error) {
-                console.log('Audio playback error:', error);
-            }
-        }
 
         const loginContainer = document.getElementById('loginContainer');
         const dashboard = document.getElementById('dashboard');
@@ -847,46 +790,14 @@
         const archivedTab = document.getElementById('archivedTab');
         const notificationBanner = document.getElementById('notificationBanner');
         const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
-        let notificationPermissionGranted = false;
-
-        // Show notification banner if permission not granted (only if elements exist)
-        if (notificationBanner && 'Notification' in window && Notification.permission === 'default') {
-            setTimeout(() => {
-                notificationBanner.classList.add('show');
-            }, 2000);
-        } else if (Notification.permission === 'granted') {
-            notificationPermissionGranted = true;
-        }
-
-        // Handle enable notifications button click
-        if (enableNotificationsBtn) {
-            enableNotificationsBtn.addEventListener('click', async () => {
-                const permission = await Notification.requestPermission();
-                if (permission === 'granted') {
-                    notificationPermissionGranted = true;
-                    if (notificationBanner) {
-                        notificationBanner.classList.remove('show');
-                    }
-                    
-                    // Register service worker for background notifications
-                    if ('serviceWorker' in navigator) {
-                        try {
-                            await navigator.serviceWorker.register('/sw.js');
-                            console.log('Service Worker registered for admin');
-                        } catch (error) {
-                            console.error('Service Worker registration failed:', error);
-                        }
-                    }
-                }
-            });
-        }
+        const endChatBtn = document.getElementById('endChatBtn');
 
         messagesContainer.addEventListener('scroll', () => {
             const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
             userScrolledUp = !isAtBottom;
         });
 
-        window.addEventListener('load', async () => {
+        window.addEventListener('load', () => {
             const savedAdmin = localStorage.getItem('adminSession');
             if (savedAdmin) {
                 try {
@@ -899,20 +810,7 @@
                         document.getElementById('adminEmail').textContent = adminData.username;
                         loginContainer.style.display = 'none';
                         dashboard.classList.add('active');
-                        
-                        // Only load sessions if database is initialized
-                        if (database) {
-                            loadSessions();
-                        } else {
-                            sessionsList.innerHTML = '<div class="empty-state">⚠️ Firebase not configured. Add your Firebase config to use the chat.</div>';
-                        }
-                        
-                        // Show notification banner if needed
-                        setTimeout(() => {
-                            if (notificationBanner && 'Notification' in window && Notification.permission === 'default') {
-                                notificationBanner.classList.add('show');
-                            }
-                        }, 2000);
+                        loadSessions();
                     } else {
                         localStorage.removeItem('adminSession');
                     }
@@ -930,6 +828,38 @@
             }, 5000);
         }
 
+        function playNotificationSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (error) {
+                console.log('Audio playback error:', error);
+            }
+        }
+
+        function showBrowserNotification(title, body) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, {
+                    body: body,
+                    icon: '🔔',
+                    badge: '🔔'
+                });
+            }
+        }
+
         function scrollToBottom() {
             if (!userScrolledUp) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -939,6 +869,29 @@
         function getInitials(name) {
             return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         }
+
+        function endChatNotification() {
+            if (!currentSessionId) return;
+            
+            if (confirm('Send "Chat Ended" notification to customer? Customer can still message you.')) {
+                try {
+                    const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
+                    set(messageRef, {
+                        text: 'Chat session marked as completed by support agent. You can still continue messaging if needed.',
+                        type: 'notification',
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    alert('Chat ended notification sent to customer.');
+                    setTimeout(scrollToBottom, 100);
+                } catch (error) {
+                    console.error('Error sending end chat notification:', error);
+                    showConnectionError();
+                }
+            }
+        }
+
+        endChatBtn.addEventListener('click', endChatNotification);
 
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -954,20 +907,7 @@
                 document.getElementById('adminEmail').textContent = username;
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
-                
-                // Only load sessions if database is initialized
-                if (database) {
-                    loadSessions();
-                } else {
-                    sessionsList.innerHTML = '<div class="empty-state">⚠️ Firebase not configured. Add your Firebase config to use the chat.</div>';
-                }
-                
-                // Show notification banner after login if needed
-                setTimeout(() => {
-                    if (notificationBanner && 'Notification' in window && Notification.permission === 'default') {
-                        notificationBanner.classList.add('show');
-                    }
-                }, 2000);
+                loadSessions();
             } else {
                 errorMessage.classList.add('show');
                 setTimeout(() => errorMessage.classList.remove('show'), 3000);
@@ -996,26 +936,6 @@
             archivedTab.classList.add('active');
             activeTab.classList.remove('active');
             loadSessions();
-        });
-
-        const endChatBtn = document.getElementById('endChatBtn');
-        
-        endChatBtn.addEventListener('click', async () => {
-            if (!currentSessionId) return;
-            
-            if (confirm('End this chat? A closure message will be sent to the customer.')) {
-                try {
-                    const endRef = push(ref(database, `sessions/${currentSessionId}/messages`));
-                    await set(endRef, {
-                        type: 'ended',
-                        text: "This conversation has been ended. Feel free to message us again if you need further assistance.",
-                        timestamp: serverTimestamp()
-                    });
-                } catch (error) {
-                    console.error('Error ending chat:', error);
-                    showConnectionError();
-                }
-            }
         });
 
         function loadSessions() {
@@ -1093,11 +1013,10 @@
 
                     if (isNewCustomer && !notifiedCustomers.has(id)) {
                         notifiedCustomers.add(id);
-                        playPopSound();
-                        showPushNotification(
+                        playNotificationSound();
+                        showBrowserNotification(
                             '🆕 New Customer',
-                            `${session.customerName} just joined the chat!`,
-                            '👤'
+                            `${session.customerName} just joined the chat!`
                         );
                     }
 
@@ -1108,14 +1027,10 @@
                         if (lastMessageCounts[id] && messageCount > lastMessageCounts[id]) {
                             const lastMsg = messages ? Object.values(messages).pop() : null;
                             if (lastMsg && lastMsg.sender === 'customer' && id !== currentSessionId) {
-                                playPopSound();
-                                const messagePreview = lastMsg.text.length > 50 
-                                    ? lastMsg.text.substring(0, 50) + '...' 
-                                    : lastMsg.text;
-                                showPushNotification(
+                                playNotificationSound();
+                                showBrowserNotification(
                                     `Message from ${session.customerName}`,
-                                    messagePreview,
-                                    '💬'
+                                    lastMsg.text.substring(0, 50) + (lastMsg.text.length > 50 ? '...' : '')
                                 );
                             }
                         }
@@ -1282,7 +1197,7 @@
                 if (currentMessageCount > previousMessageCount && messages) {
                     const lastMsg = Object.values(messages).pop();
                     if (lastMsg && lastMsg.sender === 'customer') {
-                        playPopSound();
+                        playNotificationSound();
                     }
                 }
 
