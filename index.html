@@ -745,7 +745,6 @@
     appId: "1:817965074720:web:365b7c175189150b11af45",
     measurementId: "G-BBQ6TPTJW5"
   };
-
         const ADMIN_CREDENTIALS = {
             username: 'admin',
             password: 'admin123' // CHANGE THIS PASSWORD!
@@ -850,8 +849,8 @@
         const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
         let notificationPermissionGranted = false;
 
-        // Show notification banner if permission not granted
-        if ('Notification' in window && Notification.permission === 'default') {
+        // Show notification banner if permission not granted (only if elements exist)
+        if (notificationBanner && 'Notification' in window && Notification.permission === 'default') {
             setTimeout(() => {
                 notificationBanner.classList.add('show');
             }, 2000);
@@ -860,23 +859,27 @@
         }
 
         // Handle enable notifications button click
-        enableNotificationsBtn.addEventListener('click', async () => {
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
-                notificationPermissionGranted = true;
-                notificationBanner.classList.remove('show');
-                
-                // Register service worker for background notifications
-                if ('serviceWorker' in navigator) {
-                    try {
-                        await navigator.serviceWorker.register('/sw.js');
-                        console.log('Service Worker registered for admin');
-                    } catch (error) {
-                        console.error('Service Worker registration failed:', error);
+        if (enableNotificationsBtn) {
+            enableNotificationsBtn.addEventListener('click', async () => {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    notificationPermissionGranted = true;
+                    if (notificationBanner) {
+                        notificationBanner.classList.remove('show');
+                    }
+                    
+                    // Register service worker for background notifications
+                    if ('serviceWorker' in navigator) {
+                        try {
+                            await navigator.serviceWorker.register('/sw.js');
+                            console.log('Service Worker registered for admin');
+                        } catch (error) {
+                            console.error('Service Worker registration failed:', error);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
 
         messagesContainer.addEventListener('scroll', () => {
             const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
@@ -896,11 +899,17 @@
                         document.getElementById('adminEmail').textContent = adminData.username;
                         loginContainer.style.display = 'none';
                         dashboard.classList.add('active');
-                        loadSessions();
+                        
+                        // Only load sessions if database is initialized
+                        if (database) {
+                            loadSessions();
+                        } else {
+                            sessionsList.innerHTML = '<div class="empty-state">⚠️ Firebase not configured. Add your Firebase config to use the chat.</div>';
+                        }
                         
                         // Show notification banner if needed
                         setTimeout(() => {
-                            if ('Notification' in window && Notification.permission === 'default') {
+                            if (notificationBanner && 'Notification' in window && Notification.permission === 'default') {
                                 notificationBanner.classList.add('show');
                             }
                         }, 2000);
@@ -945,11 +954,17 @@
                 document.getElementById('adminEmail').textContent = username;
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
-                loadSessions();
+                
+                // Only load sessions if database is initialized
+                if (database) {
+                    loadSessions();
+                } else {
+                    sessionsList.innerHTML = '<div class="empty-state">⚠️ Firebase not configured. Add your Firebase config to use the chat.</div>';
+                }
                 
                 // Show notification banner after login if needed
                 setTimeout(() => {
-                    if ('Notification' in window && Notification.permission === 'default') {
+                    if (notificationBanner && 'Notification' in window && Notification.permission === 'default') {
                         notificationBanner.classList.add('show');
                     }
                 }, 2000);
