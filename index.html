@@ -618,6 +618,39 @@
         .connection-error.show {
             display: block;
         }
+
+        .notification-permission-banner {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 13px;
+            border-bottom: 1px solid #fde68a;
+            display: none;
+            flex-shrink: 0;
+        }
+
+        .notification-permission-banner.show {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .notification-permission-banner button {
+            padding: 6px 16px;
+            background: #92400e;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .notification-permission-banner button:hover {
+            background: #78350f;
+        }
     </style>
 </head>
 <body>
@@ -635,6 +668,11 @@
     </div>
 
     <div class="dashboard" id="dashboard">
+        <div class="notification-permission-banner" id="notificationBanner">
+            <span>🔔 Enable notifications to get alerts for new customers and messages</span>
+            <button id="enableNotificationsBtn">Enable</button>
+        </div>
+
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>Chat Sessions</h2>
@@ -808,10 +846,37 @@
         const inputContainer = document.getElementById('inputContainer');
         const activeTab = document.getElementById('activeTab');
         const archivedTab = document.getElementById('archivedTab');
+        const notificationBanner = document.getElementById('notificationBanner');
+        const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
+        let notificationPermissionGranted = false;
 
+        // Show notification banner if permission not granted
         if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
+            setTimeout(() => {
+                notificationBanner.classList.add('show');
+            }, 2000);
+        } else if (Notification.permission === 'granted') {
+            notificationPermissionGranted = true;
         }
+
+        // Handle enable notifications button click
+        enableNotificationsBtn.addEventListener('click', async () => {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                notificationPermissionGranted = true;
+                notificationBanner.classList.remove('show');
+                
+                // Register service worker for background notifications
+                if ('serviceWorker' in navigator) {
+                    try {
+                        await navigator.serviceWorker.register('/sw.js');
+                        console.log('Service Worker registered for admin');
+                    } catch (error) {
+                        console.error('Service Worker registration failed:', error);
+                    }
+                }
+            }
+        });
 
         messagesContainer.addEventListener('scroll', () => {
             const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
@@ -819,8 +884,6 @@
         });
 
         window.addEventListener('load', async () => {
-            await requestNotificationPermission();
-            
             const savedAdmin = localStorage.getItem('adminSession');
             if (savedAdmin) {
                 try {
@@ -834,6 +897,13 @@
                         loginContainer.style.display = 'none';
                         dashboard.classList.add('active');
                         loadSessions();
+                        
+                        // Show notification banner if needed
+                        setTimeout(() => {
+                            if ('Notification' in window && Notification.permission === 'default') {
+                                notificationBanner.classList.add('show');
+                            }
+                        }, 2000);
                     } else {
                         localStorage.removeItem('adminSession');
                     }
@@ -876,6 +946,13 @@
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
                 loadSessions();
+                
+                // Show notification banner after login if needed
+                setTimeout(() => {
+                    if ('Notification' in window && Notification.permission === 'default') {
+                        notificationBanner.classList.add('show');
+                    }
+                }, 2000);
             } else {
                 errorMessage.classList.add('show');
                 setTimeout(() => errorMessage.classList.remove('show'), 3000);
