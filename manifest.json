@@ -4,16 +4,16 @@
   "description": "Shopify Support Chat Admin Dashboard",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f5f5",
-  "theme_color": "#666",
+  "background_color": "#ffffff",
+  "theme_color": "#666666",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/5968/5968705.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "icon-512.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/5968/5968705.png",
       "sizes": "512x512",
       "type": "image/png"
     }
