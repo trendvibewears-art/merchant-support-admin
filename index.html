@@ -449,7 +449,7 @@
         }
 
         .message.system .message-bubble {
-            background: #f0f9ff;
+            background: #f0fdf4;
             color: #0369a1;
             border: 1px solid #e0f2fe;
             border-radius: 12px;
@@ -734,6 +734,7 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { getMessaging, getToken, onMessage, isSupported } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
@@ -751,11 +752,19 @@
             password: 'admin123'
         };
 
-        let app, database;
+        let app, database, messaging = null;
         
         try {
             app = initializeApp(firebaseConfig);
             database = getDatabase(app);
+            
+            // Initialize messaging if supported
+            isSupported().then(supported => {
+                if (supported) {
+                    messaging = getMessaging(app);
+                    setupFirebaseMessaging();
+                }
+            });
         } catch (error) {
             console.error('Firebase initialization error:', error);
             showConnectionError();
@@ -792,12 +801,161 @@
         const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
         const endChatBtn = document.getElementById('endChatBtn');
 
+        // ==================== NOTIFICATION FUNCTIONS ====================
+        
+        async function setupFirebaseMessaging() {
+            try {
+                // Register service worker
+                const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                console.log('Service Worker registered:', registration);
+                
+                // Check notification permission
+                if (Notification.permission === 'default') {
+                    notificationBanner.classList.add('show');
+                } else if (Notification.permission === 'granted') {
+                    await requestNotificationPermission();
+                }
+                
+                // Listen for foreground messages
+                onMessage(messaging, (payload) => {
+                    console.log('Foreground message received:', payload);
+                    playNotificationSound();
+                    
+                    // Show in-app notification
+                    showInAppNotification(
+                        payload.notification?.title || 'New Message',
+                        payload.notification?.body || 'You have a new notification'
+                    );
+                });
+            } catch (error) {
+                console.error('Firebase Messaging setup error:', error);
+            }
+        }
+
+        async function requestNotificationPermission() {
+            try {
+                const permission = await Notification.requestPermission();
+                
+                if (permission === 'granted') {
+                    console.log('Notification permission granted.');
+                    
+                    // Get FCM token
+                    const token = await getToken(messaging, {
+                        vapidKey: 'BL1i6j_tfVw9vKd7x_lAQ-TnGhP_YFwQrR_zKXXfF0WtSInQHDwPlpHeJTTvm5vFdG2lRguhOZ0P99nL3eTAnaI',
+                        serviceWorkerRegistration: await navigator.serviceWorker.ready
+                    });
+                    
+                    if (token) {
+                        console.log('FCM Token obtained:', token);
+                        saveAdminToken(token);
+                    }
+                    
+                    notificationBanner.classList.remove('show');
+                } else {
+                    console.log('Notification permission denied.');
+                }
+            } catch (error) {
+                console.error('Error requesting notification permission:', error);
+            }
+        }
+
+        function saveAdminToken(token) {
+            const adminId = 'admin-support';
+            const tokenRef = ref(database, `adminTokens/${adminId}`);
+            set(tokenRef, {
+                token: token,
+                timestamp: Date.now(),
+                username: 'admin'
+            });
+        }
+
+        function sendPushNotificationToAdmin(title, body, sessionId = null) {
+            // This would be called from a Cloud Function in production
+            // For now, we'll use local notifications
+            if (Notification.permission === 'granted') {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: '🔔',
+                    badge: '🔔',
+                    tag: sessionId || 'chat-notification',
+                    requireInteraction: false
+                });
+                
+                notification.onclick = () => {
+                    window.focus();
+                    if (sessionId && currentSessionId !== sessionId) {
+                        // In a real app, you would navigate to the session
+                        alert(`Switch to session: ${sessionId}`);
+                    }
+                    notification.close();
+                };
+            }
+        }
+
+        function showInAppNotification(title, message) {
+            // Create a temporary notification element
+            const notificationEl = document.createElement('div');
+            notificationEl.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+                max-width: 300px;
+                animation: slideIn 0.3s ease-out;
+                border-left: 4px solid #666;
+            `;
+            
+            notificationEl.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 5px;">${title}</div>
+                <div style="font-size: 13px; color: #666;">${message}</div>
+            `;
+            
+            document.body.appendChild(notificationEl);
+            
+            setTimeout(() => {
+                notificationEl.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => notificationEl.remove(), 300);
+            }, 5000);
+        }
+
+        // Add CSS animations for in-app notifications
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // ==================== CORE APPLICATION FUNCTIONS ====================
+
         messagesContainer.addEventListener('scroll', () => {
             const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
             userScrolledUp = !isAtBottom;
         });
 
         window.addEventListener('load', () => {
+            // Register service worker for notifications
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            }
+
+            // Check for saved admin session
             const savedAdmin = localStorage.getItem('adminSession');
             if (savedAdmin) {
                 try {
@@ -811,6 +969,9 @@
                         loginContainer.style.display = 'none';
                         dashboard.classList.add('active');
                         loadSessions();
+                        
+                        // Setup notification listener for new messages
+                        setupNotificationListener();
                     } else {
                         localStorage.removeItem('adminSession');
                     }
@@ -830,6 +991,7 @@
 
         function playNotificationSound() {
             try {
+                // Create a simple notification sound
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioContext.createOscillator();
                 const gainNode = audioContext.createGain();
@@ -850,16 +1012,6 @@
             }
         }
 
-        function showBrowserNotification(title, body) {
-            if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(title, {
-                    body: body,
-                    icon: '🔔',
-                    badge: '🔔'
-                });
-            }
-        }
-
         function scrollToBottom() {
             if (!userScrolledUp) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -870,7 +1022,87 @@
             return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         }
 
-        function endChatNotification() {
+        // ==================== SETUP NOTIFICATION LISTENER ====================
+
+        function setupNotificationListener() {
+            // Listen for new customer sessions
+            const sessionsRef = ref(database, 'sessions');
+            onValue(sessionsRef, (snapshot) => {
+                const sessions = snapshot.val();
+                if (!sessions) return;
+
+                Object.entries(sessions).forEach(([id, session]) => {
+                    if (session.newCustomer && !notifiedCustomers.has(id)) {
+                        notifiedCustomers.add(id);
+                        
+                        // Play sound
+                        playNotificationSound();
+                        
+                        // Show browser notification
+                        if (Notification.permission === 'granted') {
+                            sendPushNotificationToAdmin(
+                                '🆕 New Customer',
+                                `${session.customerName} just joined the chat!`,
+                                id
+                            );
+                        }
+                        
+                        // Show in-app notification
+                        showInAppNotification(
+                            'New Customer Joined',
+                            `${session.customerName} needs assistance`
+                        );
+                    }
+                });
+            });
+
+            // Listen for new messages in all sessions
+            const allMessagesRef = ref(database, 'sessions');
+            onValue(allMessagesRef, (snapshot) => {
+                const sessions = snapshot.val();
+                if (!sessions) return;
+
+                Object.entries(sessions).forEach(([sessionId, session]) => {
+                    if (session.messages) {
+                        const messageCount = Object.keys(session.messages).length;
+                        
+                        if (lastMessageCounts[sessionId] && messageCount > lastMessageCounts[sessionId]) {
+                            const messages = session.messages;
+                            const lastMsgKey = Object.keys(messages).pop();
+                            const lastMsg = messages[lastMsgKey];
+                            
+                            if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
+                                playNotificationSound();
+                                
+                                if (Notification.permission === 'granted') {
+                                    sendPushNotificationToAdmin(
+                                        `💬 ${session.customerName}`,
+                                        lastMsg.text.substring(0, 50) + (lastMsg.text.length > 50 ? '...' : ''),
+                                        sessionId
+                                    );
+                                }
+                                
+                                showInAppNotification(
+                                    `New message from ${session.customerName}`,
+                                    lastMsg.text.substring(0, 100) + (lastMsg.text.length > 100 ? '...' : '')
+                                );
+                            }
+                        }
+                        lastMessageCounts[sessionId] = messageCount;
+                    } else {
+                        lastMessageCounts[sessionId] = 0;
+                    }
+                });
+            });
+        }
+
+        // ==================== EVENT LISTENERS ====================
+
+        enableNotificationsBtn.addEventListener('click', async () => {
+            await requestNotificationPermission();
+        });
+
+        endChatBtn.addEventListener('click', () => {
             if (!currentSessionId) return;
             
             if (confirm('Send "Chat Ended" notification to customer? Customer can still message you.')) {
@@ -882,16 +1114,14 @@
                         timestamp: serverTimestamp()
                     });
                     
-                    alert('Chat ended notification sent to customer.');
+                    showInAppNotification('Chat Ended', 'Notification sent to customer');
                     setTimeout(scrollToBottom, 100);
                 } catch (error) {
                     console.error('Error sending end chat notification:', error);
                     showConnectionError();
                 }
             }
-        }
-
-        endChatBtn.addEventListener('click', endChatNotification);
+        });
 
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -908,6 +1138,14 @@
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
                 loadSessions();
+                setupNotificationListener();
+                
+                // Request notification permission after login
+                setTimeout(() => {
+                    if (Notification.permission === 'default') {
+                        notificationBanner.classList.add('show');
+                    }
+                }, 1000);
             } else {
                 errorMessage.classList.add('show');
                 setTimeout(() => errorMessage.classList.remove('show'), 3000);
@@ -938,6 +1176,8 @@
             loadSessions();
         });
 
+        // ==================== SESSION MANAGEMENT ====================
+
         function loadSessions() {
             const sessionsRef = ref(database, 'sessions');
             onValue(sessionsRef, (snapshot) => {
@@ -958,84 +1198,15 @@
                     return;
                 }
 
+                filteredSessions.sort((a, b) => {
+                    const timeA = a[1].lastActivity || a[1].startedAt || 0;
+                    const timeB = b[1].lastActivity || b[1].startedAt || 0;
+                    return timeB - timeA;
+                });
+
                 filteredSessions.forEach(([id, session]) => {
-                    const sessionDiv = document.createElement('div');
-                    const isNewCustomer = session.newCustomer && !showingArchived;
-                    sessionDiv.className = `session-item ${id === currentSessionId ? 'active' : ''} ${isNewCustomer ? 'new-customer' : ''}`;
-                    
-                    const time = session.startedAt ? formatTime(session.startedAt) : '';
-                    
-                    const actions = showingArchived 
-                        ? `<button class="session-btn unarchive" data-id="${id}">↩️ Unarchive</button>
-                           <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`
-                        : `<button class="session-btn archive" data-id="${id}">📦 Archive</button>
-                           <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`;
-                    
-                    const newBadge = isNewCustomer ? '<span class="new-customer-badge">NEW</span>' : '';
-                    
-                    sessionDiv.innerHTML = `
-                        <div class="session-header">
-                            <div class="session-name">
-                                <span class="online-dot ${session.customerOnline ? 'online' : ''}"></span>
-                                ${session.customerName}${newBadge}
-                            </div>
-                            <div class="session-time">${time}</div>
-                        </div>
-                        <div class="session-email">${session.customerEmail}</div>
-                        <div class="session-actions">
-                            ${actions}
-                        </div>
-                        <div class="unread-badge ${session.unreadByAdmin > 0 ? 'show' : ''}">${session.unreadByAdmin || 0}</div>
-                    `;
-
-                    const actionButtons = sessionDiv.querySelectorAll('.session-btn');
-                    actionButtons.forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const sessionId = btn.dataset.id;
-                            if (btn.classList.contains('archive')) {
-                                archiveSession(sessionId);
-                            } else if (btn.classList.contains('unarchive')) {
-                                unarchiveSession(sessionId);
-                            } else if (btn.classList.contains('delete')) {
-                                deleteSession(sessionId, session.customerName);
-                            }
-                        });
-                    });
-
-                    sessionDiv.addEventListener('click', (e) => {
-                        if (!e.target.classList.contains('session-btn')) {
-                            selectSession(id, session);
-                        }
-                    });
-
+                    const sessionDiv = createSessionElement(id, session);
                     sessionsList.appendChild(sessionDiv);
-
-                    if (isNewCustomer && !notifiedCustomers.has(id)) {
-                        notifiedCustomers.add(id);
-                        playNotificationSound();
-                        showBrowserNotification(
-                            '🆕 New Customer',
-                            `${session.customerName} just joined the chat!`
-                        );
-                    }
-
-                    get(ref(database, `sessions/${id}/messages`)).then((msgSnapshot) => {
-                        const messages = msgSnapshot.val();
-                        const messageCount = messages ? Object.keys(messages).length : 0;
-                        
-                        if (lastMessageCounts[id] && messageCount > lastMessageCounts[id]) {
-                            const lastMsg = messages ? Object.values(messages).pop() : null;
-                            if (lastMsg && lastMsg.sender === 'customer' && id !== currentSessionId) {
-                                playNotificationSound();
-                                showBrowserNotification(
-                                    `Message from ${session.customerName}`,
-                                    lastMsg.text.substring(0, 50) + (lastMsg.text.length > 50 ? '...' : '')
-                                );
-                            }
-                        }
-                        lastMessageCounts[id] = messageCount;
-                    });
                 });
             }, (error) => {
                 console.error('Error loading sessions:', error);
@@ -1043,11 +1214,81 @@
             });
         }
 
+        function createSessionElement(id, session) {
+            const sessionDiv = document.createElement('div');
+            const isNewCustomer = session.newCustomer && !showingArchived;
+            sessionDiv.className = `session-item ${id === currentSessionId ? 'active' : ''} ${isNewCustomer ? 'new-customer' : ''}`;
+            
+            const time = session.lastActivity ? formatTime(session.lastActivity) : 
+                        session.startedAt ? formatTime(session.startedAt) : '';
+            
+            const actions = showingArchived 
+                ? `<button class="session-btn unarchive" data-id="${id}">↩️ Unarchive</button>
+                   <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`
+                : `<button class="session-btn archive" data-id="${id}">📦 Archive</button>
+                   <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`;
+            
+            const newBadge = isNewCustomer ? '<span class="new-customer-badge">NEW</span>' : '';
+            const unreadCount = session.unreadByAdmin || 0;
+            
+            sessionDiv.innerHTML = `
+                <div class="session-header">
+                    <div class="session-name">
+                        <span class="online-dot ${session.customerOnline ? 'online' : ''}"></span>
+                        ${session.customerName}${newBadge}
+                    </div>
+                    <div class="session-time">${time}</div>
+                </div>
+                <div class="session-email">${session.customerEmail}</div>
+                <div class="session-actions">
+                    ${actions}
+                </div>
+                <div class="unread-badge ${unreadCount > 0 ? 'show' : ''}">${unreadCount}</div>
+            `;
+
+            // Add event listeners
+            const actionButtons = sessionDiv.querySelectorAll('.session-btn');
+            actionButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const sessionId = btn.dataset.id;
+                    if (btn.classList.contains('archive')) {
+                        archiveSession(sessionId);
+                    } else if (btn.classList.contains('unarchive')) {
+                        unarchiveSession(sessionId);
+                    } else if (btn.classList.contains('delete')) {
+                        deleteSession(sessionId, session.customerName);
+                    }
+                });
+            });
+
+            sessionDiv.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('session-btn')) {
+                    selectSession(id, session);
+                }
+            });
+
+            return sessionDiv;
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = (now - date) / 1000;
+            
+            if (diff < 60) return 'now';
+            if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+            if (diff < 86400) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+
         function archiveSession(sessionId) {
             if (confirm('Archive this chat? It will be moved to the Archived tab.')) {
                 update(ref(database, `sessions/${sessionId}`), {
                     archived: true,
-                    newCustomer: false
+                    newCustomer: false,
+                    lastActivity: Date.now()
                 });
                 
                 if (currentSessionId === sessionId) {
@@ -1062,7 +1303,8 @@
         function unarchiveSession(sessionId) {
             update(ref(database, `sessions/${sessionId}`), {
                 archived: false,
-                newCustomer: false
+                newCustomer: false,
+                lastActivity: Date.now()
             });
         }
 
@@ -1079,20 +1321,13 @@
             }
         }
 
-        function formatTime(timestamp) {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diff = (now - date) / 1000;
-            
-            if (diff < 60) return 'a moment ago';
-            if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
+        // ==================== CHAT FUNCTIONS ====================
 
         function selectSession(sessionId, session) {
             currentSessionId = sessionId;
             currentCustomerInitials = getInitials(session.customerName);
 
+            // Update UI
             document.querySelectorAll('.session-item').forEach(item => item.classList.remove('active'));
             event.target.closest('.session-item')?.classList.add('active');
 
@@ -1101,14 +1336,18 @@
             inputContainer.classList.remove('hidden');
             chatContent.style.display = 'flex';
 
+            // Update header
             document.getElementById('customerNameHeader').textContent = session.customerName;
             document.getElementById('customerEmailHeader').textContent = session.customerEmail;
 
+            // Mark as read
             update(ref(database, `sessions/${sessionId}`), { 
                 unreadByAdmin: 0,
-                newCustomer: false
+                newCustomer: false,
+                lastActivity: Date.now()
             });
 
+            // Set admin online status
             if (adminPresenceRef) {
                 set(adminPresenceRef, false);
             }
@@ -1116,10 +1355,12 @@
             set(adminPresenceRef, true);
             onDisconnect(adminPresenceRef).set(false);
 
+            // Start listening
             listenForMessages(sessionId);
             listenForCustomerTyping(sessionId);
             messageInput.focus();
 
+            // Mobile responsive
             if (window.innerWidth <= 768) {
                 sidebar.classList.add('hide-mobile');
             }
@@ -1138,6 +1379,11 @@
                     sender: 'admin',
                     timestamp: serverTimestamp(),
                     read: false
+                });
+
+                // Update session last activity
+                update(ref(database, `sessions/${currentSessionId}`), {
+                    lastActivity: Date.now()
                 });
 
                 messageInput.value = '';
@@ -1175,13 +1421,9 @@
 
         function listenForMessages(sessionId) {
             const messagesRef = ref(database, `sessions/${sessionId}/messages`);
-            let previousMessageCount = 0;
-
             onValue(messagesRef, (snapshot) => {
                 const messages = snapshot.val();
                 messagesContainer.innerHTML = '<div class="date-divider">Today</div>';
-
-                const currentMessageCount = messages ? Object.keys(messages).length : 0;
 
                 if (messages) {
                     Object.entries(messages).forEach(([id, msg]) => {
@@ -1193,15 +1435,6 @@
                     });
                 }
 
-                // Play sound if new customer message arrived
-                if (currentMessageCount > previousMessageCount && messages) {
-                    const lastMsg = Object.values(messages).pop();
-                    if (lastMsg && lastMsg.sender === 'customer') {
-                        playNotificationSound();
-                    }
-                }
-
-                previousMessageCount = currentMessageCount;
                 setTimeout(scrollToBottom, 100);
             }, (error) => {
                 console.error('Error listening for messages:', error);
@@ -1235,10 +1468,10 @@
             info.className = 'message-info';
 
             const time = msg.timestamp ? formatTime(msg.timestamp) : 'now';
-            const receipt = msg.read ? 'seen' : 'delivered';
+            const receipt = msg.read ? '✓✓' : '✓';
 
             if (msg.sender === 'admin') {
-                info.innerHTML = `<span>${time}, ${receipt}</span>`;
+                info.innerHTML = `<span>${time}</span><span>${receipt}</span>`;
             } else {
                 info.innerHTML = `<span>${time}</span>`;
             }
