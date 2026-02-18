@@ -1,8 +1,8 @@
 {
   "name": "Shopify Support Admin",
-  "short_name": "Support Admin",
-  "description": "Shopify Support Chat Admin Dashboard",
-  "start_url": "/",
+  "short_name": "Shopify Admin",
+  "description": "Shopify Support Admin Dashboard",
+  "start_url": "/admin.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#666666",
