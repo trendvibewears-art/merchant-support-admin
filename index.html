@@ -14,7 +14,6 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5968/5968705.png">
     
     <style>
-        /* ALL YOUR EXISTING STYLES - KEEP THEM THE SAME */
         * {
             margin: 0;
             padding: 0;
@@ -231,23 +230,53 @@
             font-size: 12px;
         }
 
-        .nav-btn {
-            padding: 8px 16px;
-            background: #f5f5f5;
-            color: #666;
-            border: 1px solid #e5e5e5;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+        /* ===== NEW LOGOUT BUTTON STYLES ===== */
+        .logout-btn {
             display: flex;
             align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
+            gap: 8px;
+            padding: 8px 16px;
+            background: transparent;
+            color: #666;
+            border: 1.5px solid #e5e5e5;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
         }
 
-        .nav-btn:hover {
-            background: #e5e5e5;
+        .logout-btn:hover {
+            background: #f5f5f5;
+            border-color: #999;
+            color: #333;
         }
+
+        .logout-btn svg {
+            transition: transform 0.2s ease;
+        }
+
+        .logout-btn:hover svg {
+            transform: translateX(3px);
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .logout-btn {
+                padding: 6px 12px;
+            }
+            
+            .logout-btn span {
+                display: none; /* Hide text on mobile, show only icon */
+            }
+            
+            .logout-btn svg {
+                width: 20px;
+                height: 20px;
+            }
+        }
+        /* ===== END OF NEW LOGOUT BUTTON STYLES ===== */
 
         /* Main Content Area */
         .main-content {
@@ -901,9 +930,18 @@
                         <span class="admin-role">Support Manager</span>
                     </div>
                 </div>
-                <button class="nav-btn" id="logoutBtn">
-                    <span>🚪</span> Logout
+                
+                <!-- ===== NEW LOGOUT BUTTON ===== -->
+                <button class="logout-btn" id="logoutBtn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 17L21 12L16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Sign out</span>
                 </button>
+                <!-- ===== END OF NEW LOGOUT BUTTON ===== -->
+                
             </div>
         </div>
 
