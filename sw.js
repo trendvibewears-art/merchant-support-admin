@@ -1,24 +1,52 @@
-// Service Worker for Push Notifications
-self.addEventListener('push', function(event) {
-    const data = event.data ? event.data.json() : {};
-    const title = data.title || 'New Message';
-    const options = {
-        body: data.body || 'You have a new message',
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
-        vibrate: [200, 100, 200],
-        tag: 'support-message',
-        requireInteraction: false
-    };
-
-    event.waitUntil(
-        self.registration.showNotification(title, options)
-    );
+// Service Worker for background notifications
+self.addEventListener('install', (event) => {
+  console.log('Service Worker installing...');
+  self.skipWaiting();
 });
 
-self.addEventListener('notificationclick', function(event) {
-    event.notification.close();
-    event.waitUntil(
-        clients.openWindow(event.notification.data?.url || '/')
-    );
+self.addEventListener('activate', (event) => {
+  console.log('Service Worker activating...');
+  event.waitUntil(clients.claim());
+});
+
+// Handle push notifications in the background
+self.addEventListener('push', (event) => {
+  console.log('Push received:', event);
+  
+  const options = {
+    body: event.data?.text() || 'New notification from Shopify Admin',
+    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
+    badge: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
+    vibrate: [200, 100, 200],
+    data: {
+      url: self.location.origin + '/admin.html'
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification('Shopify Admin', options)
+  );
+});
+
+// Handle notification clicks
+self.addEventListener('notificationclick', (event) => {
+  console.log('Notification clicked:', event);
+  
+  event.notification.close();
+  
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        if (clientList.length > 0) {
+          let client = clientList[0];
+          for (let i = 0; i < clientList.length; i++) {
+            if (clientList[i].focused) {
+              client = clientList[i];
+            }
+          }
+          return client.focus();
+        }
+        return clients.openWindow('/admin.html');
+      })
+  );
 });
