@@ -1139,6 +1139,7 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
@@ -1161,17 +1162,18 @@
         ];
 
         const ADMIN_CREDENTIALS = {
-            username: 'FATISCO',
-            password: 'FATISCO8'
+            username: 'admin',
+            password: 'admin123'
         };
 
-        let app, database;
+        let app, database, messaging;
         let deferredPrompt = null;
         let isPWA = false;
         
         try {
             app = initializeApp(firebaseConfig);
             database = getDatabase(app);
+            messaging = getMessaging(app);
         } catch (error) {
             console.error('Firebase initialization error:', error);
             showConnectionError();
@@ -1186,7 +1188,6 @@
         let showingArchived = false;
         let userScrolledUp = false;
         let notifiedCustomers = new Set();
-        let notificationPermissionGranted = false;
 
         // DOM Elements
         const loginContainer = document.getElementById('loginContainer');
@@ -1234,7 +1235,6 @@
             e.preventDefault();
             deferredPrompt = e;
             
-            // Show install prompt on mobile if not already installed
             if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && !isPWA) {
                 installPrompt.classList.add('show');
             }
@@ -1252,21 +1252,129 @@
             }
         });
 
-        // Hide install prompt if already installed
         window.addEventListener('appinstalled', () => {
             console.log('Admin PWA was installed');
             installPrompt.style.display = 'none';
             deferredPrompt = null;
         });
 
-        // ==================== COMPLETE NOTIFICATION SYSTEM ====================
+        // ==================== FCM NOTIFICATION SETUP ====================
 
-        // Play WhatsApp "ding-dong" sound
+        // VAPID Key from Firebase Console
+        const VAPID_KEY = 'BPvPqihZJEnsUnQdnnVUIJ_szit7qXHFKfjEyogKX44rvUICKwrctxN2X7LYf3Ro1PuTvJ_n5vS98j9dTKm-v6k';
+
+        // Register service worker for FCM
+        async function registerFCMServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                    console.log('FCM Service Worker registered:', registration);
+                    
+                    // Wait for it to be ready
+                    await navigator.serviceWorker.ready;
+                    
+                    // Request notification permission and get token
+                    await requestNotificationPermission();
+                    
+                } catch (error) {
+                    console.error('FCM Service Worker registration failed:', error);
+                }
+            }
+        }
+
+        // Request notification permission and get FCM token
+        async function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                console.log('Browser does not support notifications');
+                return;
+            }
+
+            try {
+                const permission = await Notification.requestPermission();
+                
+                if (permission === 'granted') {
+                    console.log('Notification permission granted');
+                    notificationBanner.classList.remove('show');
+                    
+                    // Get FCM token
+                    const token = await getToken(messaging, {
+                        vapidKey: VAPID_KEY
+                    });
+                    
+                    console.log('FCM Token:', token);
+                    
+                    // Save token to database for targeting
+                    await saveFCMToken(token);
+                    
+                    // Show test notification
+                    showShopifyNotification(
+                        '✅ Notifications Enabled',
+                        'You will receive alerts for new customers and messages'
+                    );
+                    
+                } else if (permission === 'denied') {
+                    console.log('Notification permission denied');
+                    notificationBanner.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error getting notification permission:', error);
+            }
+        }
+
+        // Save FCM token to database
+        async function saveFCMToken(token) {
+            try {
+                const tokenRef = ref(database, 'adminFCMTokens/admin');
+                await set(tokenRef, {
+                    token: token,
+                    timestamp: Date.now(),
+                    userAgent: navigator.userAgent
+                });
+                console.log('FCM token saved to database');
+            } catch (error) {
+                console.error('Error saving FCM token:', error);
+            }
+        }
+
+        // Handle foreground messages (when app is open)
+        onMessage(messaging, (payload) => {
+            console.log('Foreground message received:', payload);
+            
+            const title = payload.notification?.title || 'Shopify Support';
+            const body = payload.notification?.body || 'New notification';
+            const icon = payload.data?.icon || '🔔';
+            
+            // Show Shopify-styled dropdown notification
+            showShopifyNotification(title, body, icon);
+            
+            // Play sound
+            playWhatsAppSound();
+        });
+
+        // Show Shopify-styled dropdown notification
+        function showShopifyNotification(title, message, icon = '🔔') {
+            console.log('Showing Shopify notification:', title, message);
+            
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            notifTitle.textContent = title;
+            notifMessage.textContent = message;
+            dropdownNotification.querySelector('.dropdown-notification-icon').textContent = icon;
+            
+            dropdownNotification.classList.add('show');
+            
+            notificationTimeout = setTimeout(() => {
+                dropdownNotification.classList.remove('show');
+            }, 5000);
+        }
+
+        // Play WhatsApp sound
         function playWhatsAppSound() {
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 
-                // First tone (higher pitch)
                 const oscillator1 = audioContext.createOscillator();
                 const gainNode1 = audioContext.createGain();
                 oscillator1.connect(gainNode1);
@@ -1278,7 +1386,6 @@
                 oscillator1.start(audioContext.currentTime);
                 oscillator1.stop(audioContext.currentTime + 0.2);
                 
-                // Second tone (lower pitch)
                 const oscillator2 = audioContext.createOscillator();
                 const gainNode2 = audioContext.createGain();
                 oscillator2.connect(gainNode2);
@@ -1290,170 +1397,77 @@
                 oscillator2.start(audioContext.currentTime + 0.15);
                 oscillator2.stop(audioContext.currentTime + 0.4);
             } catch (error) {
-                console.log('Audio playback error:', error);
+                console.log('Audio error:', error);
             }
         }
 
-        // Show dropdown notification (when app is visible/active)
-        function showDropdownNotification(title, message, icon = '🔔') {
-            console.log('📢 Admin dropdown notification:', title, message);
-            
-            // Clear any existing timeout
-            if (notificationTimeout) {
-                clearTimeout(notificationTimeout);
-            }
-            
-            // Update content
-            notifTitle.textContent = title;
-            notifMessage.textContent = message;
-            dropdownNotification.querySelector('.dropdown-notification-icon').textContent = icon;
-            
-            // Show the dropdown
-            dropdownNotification.classList.add('show');
-            
-            // Auto-hide after 5 seconds
-            notificationTimeout = setTimeout(() => {
-                dropdownNotification.classList.remove('show');
-            }, 5000);
-            
-            // Play sound
-            playWhatsAppSound();
-        }
+        // Setup notification listener
+        function setupNotificationListener() {
+            const sessionsRef = ref(database, 'sessions');
+            onValue(sessionsRef, (snapshot) => {
+                const sessions = snapshot.val();
+                if (!sessions) return;
 
-        // Show system notification (when app is in background/closed)
-        function showSystemNotification(title, body, icon = '🔔') {
-            console.log('🔔 Admin system notification:', title, body);
-            
-            if (Notification.permission === 'granted') {
-                try {
-                    const notification = new Notification(title, {
-                        body: body,
-                        icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
-                        badge: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
-                        tag: 'admin-' + Date.now(),
-                        vibrate: [200, 100, 200],
-                        silent: false,
-                        requireInteraction: true,
-                        actions: [
-                            {
-                                action: 'open',
-                                title: 'Open Dashboard'
-                            },
-                            {
-                                action: 'close',
-                                title: 'Dismiss'
-                            }
-                        ],
-                        data: {
-                            url: window.location.href,
-                            sessionId: currentSessionId,
-                            timestamp: Date.now()
-                        }
-                    });
+                updateAgentStats(sessions);
 
-                    notification.onclick = (event) => {
-                        event.preventDefault();
-                        window.focus();
-                        notification.close();
-                    };
-
-                    notification.onaction = (event) => {
-                        if (event.action === 'open') {
-                            window.focus();
-                        }
-                        notification.close();
-                    };
-
-                    setTimeout(() => notification.close(), 15000);
-
-                } catch (error) {
-                    console.error('Failed to show system notification:', error);
-                    playWhatsAppSound();
-                }
-            }
-        }
-
-        // MAIN NOTIFICATION HANDLER - Decides dropdown vs system notification
-        function handleNotification(title, message, icon = '🔔') {
-            // Check if user is actively viewing the page
-            if (document.hasFocus() && !document.hidden) {
-                // Admin is looking at the app → Show dropdown banner
-                console.log('✅ Admin is active → Showing DROPDOWN notification');
-                showDropdownNotification(title, message, icon);
-            } else {
-                // Admin has app in background or closed → Show system notification
-                console.log('✅ Admin is inactive → Showing SYSTEM notification');
-                showSystemNotification(title, message, icon);
-            }
-        }
-
-        // Keep old function names for compatibility
-        function playPopSound() {
-            playWhatsAppSound();
-        }
-
-        function showPushNotification(title, body, icon = '🔔') {
-            handleNotification(title, body, icon);
-        }
-
-        // Setup notifications
-        async function setupNotifications() {
-            if (!('Notification' in window)) {
-                console.log('Browser does not support notifications');
-                notificationBanner.style.display = 'none';
-                return;
-            }
-
-            // Check current permission
-            if (Notification.permission === 'granted') {
-                console.log('Notification permission granted');
-                notificationPermissionGranted = true;
-                notificationBanner.classList.remove('show');
-                registerServiceWorker();
-            } else if (Notification.permission === 'denied') {
-                console.log('Notifications blocked');
-                notificationBanner.style.display = 'none';
-            } else {
-                // Show banner to ask for permission
-                notificationBanner.classList.add('show');
-            }
-
-            // Handle enable button click
-            enableNotificationsBtn.addEventListener('click', async () => {
-                try {
-                    const permission = await Notification.requestPermission();
-                    if (permission === 'granted') {
-                        notificationPermissionGranted = true;
-                        notificationBanner.classList.remove('show');
-                        registerServiceWorker();
+                Object.entries(sessions).forEach(([id, session]) => {
+                    if (session.newCustomer && !notifiedCustomers.has(id)) {
+                        notifiedCustomers.add(id);
                         
-                        // Show test notification
-                        handleNotification(
-                            '✅ Notifications Enabled',
-                            'You will receive alerts for new customers and messages',
-                            '🔔'
+                        const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
+                        const agentName = agent ? agent.name : 'Support';
+                        
+                        // Show notification
+                        showShopifyNotification(
+                            '🆕 New Customer',
+                            `${session.customerName} joined - Assigned to ${agentName}`,
+                            '👤'
                         );
-                    } else if (permission === 'denied') {
-                        alert('Notifications blocked. Please enable in your phone settings.');
-                        notificationBanner.style.display = 'none';
+                        
+                        // Play sound
+                        playWhatsAppSound();
                     }
-                } catch (error) {
-                    console.error('Error requesting permission:', error);
-                }
+                });
             });
-        }
 
-        // Register service worker for background notifications
-        async function registerServiceWorker() {
-            if ('serviceWorker' in navigator) {
-                try {
-                    const registration = await navigator.serviceWorker.register('/sw.js');
-                    console.log('Service Worker registered:', registration);
-                    await navigator.serviceWorker.ready;
-                } catch (error) {
-                    console.log('Service Worker registration failed:', error);
-                }
-            }
+            const allMessagesRef = ref(database, 'sessions');
+            onValue(allMessagesRef, (snapshot) => {
+                const sessions = snapshot.val();
+                if (!sessions) return;
+
+                Object.entries(sessions).forEach(([sessionId, session]) => {
+                    if (session.messages) {
+                        const messageCount = Object.keys(session.messages).length;
+                        
+                        if (lastMessageCounts[sessionId] && messageCount > lastMessageCounts[sessionId]) {
+                            const messages = session.messages;
+                            const messageKeys = Object.keys(messages);
+                            const lastMsgKey = messageKeys[messageKeys.length - 1];
+                            const lastMsg = messages[lastMsgKey];
+                            
+                            if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
+                                const messagePreview = lastMsg.text.length > 60 
+                                    ? lastMsg.text.substring(0, 60) + '...' 
+                                    : lastMsg.text;
+                                
+                                showShopifyNotification(
+                                    `💬 ${session.customerName}`,
+                                    messagePreview,
+                                    '💬'
+                                );
+                                
+                                playWhatsAppSound();
+                                
+                                const newCount = (session.unreadByAdmin || 0) + 1;
+                                update(ref(database, `sessions/${sessionId}`), {
+                                    unreadByAdmin: newCount
+                                });
+                            }
+                        }
+                        lastMessageCounts[sessionId] = messageCount;
+                    }
+                });
+            });
         }
 
         // ==================== UPDATE AGENT STATS ====================
@@ -1483,80 +1497,13 @@
             agentStats.innerHTML = statsHtml;
         }
 
-        // ==================== NOTIFICATION LISTENER ====================
-        function setupNotificationListener() {
-            const sessionsRef = ref(database, 'sessions');
-            onValue(sessionsRef, (snapshot) => {
-                const sessions = snapshot.val();
-                if (!sessions) return;
-
-                updateAgentStats(sessions);
-
-                Object.entries(sessions).forEach(([id, session]) => {
-                    // New customer notification
-                    if (session.newCustomer && !notifiedCustomers.has(id)) {
-                        notifiedCustomers.add(id);
-                        
-                        const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
-                        const agentName = agent ? agent.name : 'Support';
-                        
-                        handleNotification(
-                            '🆕 New Customer',
-                            `${session.customerName} joined - Assigned to ${agentName}`,
-                            '👤'
-                        );
-                    }
-                });
-            });
-
-            const allMessagesRef = ref(database, 'sessions');
-            onValue(allMessagesRef, (snapshot) => {
-                const sessions = snapshot.val();
-                if (!sessions) return;
-
-                Object.entries(sessions).forEach(([sessionId, session]) => {
-                    if (session.messages) {
-                        const messageCount = Object.keys(session.messages).length;
-                        
-                        if (lastMessageCounts[sessionId] && messageCount > lastMessageCounts[sessionId]) {
-                            const messages = session.messages;
-                            const messageKeys = Object.keys(messages);
-                            const lastMsgKey = messageKeys[messageKeys.length - 1];
-                            const lastMsg = messages[lastMsgKey];
-                            
-                            if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
-                                const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
-                                const agentName = agent ? agent.name : 'Support';
-                                
-                                const messagePreview = lastMsg.text.length > 60 
-                                    ? lastMsg.text.substring(0, 60) + '...' 
-                                    : lastMsg.text;
-                                
-                                handleNotification(
-                                    `💬 ${session.customerName}`,
-                                    messagePreview,
-                                    '💬'
-                                );
-                                
-                                const newCount = (session.unreadByAdmin || 0) + 1;
-                                update(ref(database, `sessions/${sessionId}`), {
-                                    unreadByAdmin: newCount
-                                });
-                            }
-                        }
-                        lastMessageCounts[sessionId] = messageCount;
-                    }
-                });
-            });
-        }
-
         // ==================== DELETE FUNCTION ====================
         function deleteSession(sessionId, customerName) {
             if (confirm(`⚠️ Permanently delete chat with ${customerName}? This cannot be undone.`)) {
                 remove(ref(database, `sessions/${sessionId}`))
                     .then(() => {
                         console.log('Session deleted successfully:', sessionId);
-                        handleNotification('✅ Deleted', `Chat with ${customerName} removed`, '🗑️');
+                        showShopifyNotification('✅ Deleted', `Chat with ${customerName} removed`, '🗑️');
                         
                         if (currentSessionId === sessionId) {
                             goToInbox();
@@ -1671,14 +1618,13 @@
 
         backToInboxBtn.addEventListener('click', goToInbox);
 
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
             // Check if PWA
             isPWA = window.matchMedia('(display-mode: standalone)').matches || 
                     window.navigator.standalone === true;
             
-            // Setup notifications
-            setupNotifications();
-            registerServiceWorker();
+            // Register FCM service worker
+            await registerFCMServiceWorker();
             
             // Check saved admin session
             const savedAdmin = localStorage.getItem('adminSession');
@@ -1736,7 +1682,7 @@
                         timestamp: serverTimestamp()
                     });
                     
-                    handleNotification('Chat Ended', 'Chat has been ended', '✅');
+                    showShopifyNotification('Chat Ended', 'Chat has been ended', '✅');
                     setTimeout(scrollToBottom, 100);
                 } catch (error) {
                     console.error('Error ending chat:', error);
@@ -1745,7 +1691,7 @@
             }
         });
 
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -1761,11 +1707,13 @@
                 adminEmail.textContent = 'admin@support.com';
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
+                
+                // Register FCM service worker after login
+                await registerFCMServiceWorker();
+                
                 loadSessions();
                 setupNotificationListener();
                 goToInbox();
-                
-                setTimeout(() => setupNotifications(), 1000);
             } else {
                 errorMessage.classList.add('show');
                 setTimeout(() => errorMessage.classList.remove('show'), 3000);
@@ -2025,7 +1973,6 @@
             const content = document.createElement('div');
             content.className = 'message-content';
 
-            // Add agent name for admin messages
             if (msg.sender === 'admin' && msg.senderName) {
                 const nameDiv = document.createElement('div');
                 nameDiv.className = 'agent-name';
