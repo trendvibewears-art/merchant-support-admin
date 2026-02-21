@@ -1,4 +1,5 @@
-// firebase-messaging-sw.js - MUST BE AT ROOT LEVEL
+// firebase-messaging-sw.js - FIXED VERSION
+// Import Firebase scripts
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js');
 
@@ -14,12 +15,14 @@ const firebaseConfig = {
     measurementId: "G-BBQ6TPTJW5"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 
+// Get messaging instance
 const messaging = firebase.messaging();
 
-// Handle background messages (when app is closed/minimized)
-messaging.onBackgroundMessage((payload) => {
+// Handle background messages
+messaging.onBackgroundMessage(function(payload) {
     console.log('Background message received:', payload);
     
     const notificationTitle = payload.notification?.title || 'Shopify Support';
@@ -32,7 +35,7 @@ messaging.onBackgroundMessage((payload) => {
         actions: [
             {
                 action: 'open',
-                title: 'Open Admin'
+                title: 'Open'
             },
             {
                 action: 'close',
@@ -43,24 +46,25 @@ messaging.onBackgroundMessage((payload) => {
         silent: false
     };
 
-    self.registration.showNotification(notificationTitle, notificationOptions);
+    return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // Handle notification click
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', function(event) {
     console.log('Notification clicked:', event);
     
     event.notification.close();
     
-    const urlToOpen = event.notification.data?.url || '/admin.html';
+    const urlToOpen = '/admin.html';
     
     event.waitUntil(
         clients.matchAll({
             type: 'window',
             includeUncontrolled: true
-        }).then((clientList) => {
-            for (const client of clientList) {
-                if (client.url === urlToOpen && 'focus' in client) {
+        }).then(function(clientList) {
+            for (var i = 0; i < clientList.length; i++) {
+                var client = clientList[i];
+                if (client.url.includes('admin.html') && 'focus' in client) {
                     return client.focus();
                 }
             }
@@ -69,13 +73,14 @@ self.addEventListener('notificationclick', (event) => {
     );
 });
 
-// Service worker install/activate
-self.addEventListener('install', (event) => {
+// Service worker install
+self.addEventListener('install', function(event) {
     console.log('Service Worker installing...');
     self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+// Service worker activate
+self.addEventListener('activate', function(event) {
     console.log('Service Worker activating...');
     event.waitUntil(clients.claim());
 });
