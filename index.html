@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-<<head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Shopify Support Admin Dashboard</title>
     
-    <!-- PWA Support for Mobile Notifications -->
+    <!-- PWA Support for Mobile Notifications - FIXED META TAGS -->
     <link rel="manifest" href="/admin-manifest.json">
     <meta name="theme-color" content="#666666">
     <meta name="mobile-web-app-capable" content="yes">
@@ -1163,8 +1163,8 @@
         ];
 
         const ADMIN_CREDENTIALS = {
-            username: 'FATISCO',
-            password: 'FATISCO8'
+            username: 'admin',
+            password: 'admin123'
         };
 
         let app, database, messaging;
@@ -1177,7 +1177,6 @@
             messaging = getMessaging(app);
         } catch (error) {
             console.error('Firebase initialization error:', error);
-            showConnectionError();
         }
 
         let currentSessionId = null;
@@ -1225,17 +1224,16 @@
 
         let notificationTimeout = null;
 
+        // VAPID Key from Firebase Console
+        const VAPID_KEY = 'BPvPqihZJEnsUnQdnnVUIJ_szit7qXHFKfjEyogKX44rvUICKwrctxN2X7LYf3Ro1PuTvJ_n5vS98j9dTKm-v6k';
+
         // ==================== PWA INSTALL ====================
 
-        // Check if running as PWA
-        isPWA = window.matchMedia('(display-mode: standalone)').matches || 
-                window.navigator.standalone === true;
+        isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-        // Listen for install prompt
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
-            
             if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && !isPWA) {
                 installPrompt.classList.add('show');
             }
@@ -1247,135 +1245,93 @@
                 const { outcome } = await deferredPrompt.userChoice;
                 if (outcome === 'accepted') {
                     installPrompt.style.display = 'none';
-                    console.log('Admin app installed');
                 }
                 deferredPrompt = null;
             }
         });
 
         window.addEventListener('appinstalled', () => {
-            console.log('Admin PWA was installed');
             installPrompt.style.display = 'none';
             deferredPrompt = null;
         });
 
         // ==================== FCM NOTIFICATION SETUP ====================
 
-        // VAPID Key from Firebase Console
-        const VAPID_KEY = 'BPvPqihZJEnsUnQdnnVUIJ_szit7qXHFKfjEyogKX44rvUICKwrctxN2X7LYf3Ro1PuTvJ_n5vS98j9dTKm-v6k';
-
-        // Register service worker for FCM
         async function registerFCMServiceWorker() {
             if ('serviceWorker' in navigator) {
                 try {
-                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-                    console.log('FCM Service Worker registered:', registration);
+                    // Unregister any existing service workers first
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                        console.log('Unregistered old service worker');
+                    }
                     
-                    // Wait for it to be ready
+                    // Register new service worker
+                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+                        scope: '/'
+                    });
+                    console.log('FCM Service Worker registered successfully:', registration);
+                    
                     await navigator.serviceWorker.ready;
+                    console.log('Service Worker is ready');
                     
-                    // Request notification permission and get token
-                    await requestNotificationPermission();
+                    if (Notification.permission === 'granted') {
+                        await getFCMToken();
+                    } else if (Notification.permission === 'default') {
+                        notificationBanner.classList.add('show');
+                    }
                     
                 } catch (error) {
-                    console.error('FCM Service Worker registration failed:', error);
+                    console.error('Service Worker registration failed:', error);
                 }
             }
         }
 
-        // Request notification permission and get FCM token
-        async function requestNotificationPermission() {
-            if (!('Notification' in window)) {
-                console.log('Browser does not support notifications');
-                return;
-            }
-
+        async function getFCMToken() {
             try {
-                const permission = await Notification.requestPermission();
+                const token = await getToken(messaging, {
+                    vapidKey: VAPID_KEY
+                });
+                console.log('FCM Token obtained:', token);
                 
-                if (permission === 'granted') {
-                    console.log('Notification permission granted');
-                    notificationBanner.classList.remove('show');
-                    
-                    // Get FCM token
-                    const token = await getToken(messaging, {
-                        vapidKey: VAPID_KEY
-                    });
-                    
-                    console.log('FCM Token:', token);
-                    
-                    // Save token to database for targeting
-                    await saveFCMToken(token);
-                    
-                    // Show test notification
-                    showShopifyNotification(
-                        '✅ Notifications Enabled',
-                        'You will receive alerts for new customers and messages'
-                    );
-                    
-                } else if (permission === 'denied') {
-                    console.log('Notification permission denied');
-                    notificationBanner.style.display = 'none';
-                }
-            } catch (error) {
-                console.error('Error getting notification permission:', error);
-            }
-        }
-
-        // Save FCM token to database
-        async function saveFCMToken(token) {
-            try {
                 const tokenRef = ref(database, 'adminFCMTokens/admin');
                 await set(tokenRef, {
                     token: token,
-                    timestamp: Date.now(),
-                    userAgent: navigator.userAgent
+                    timestamp: Date.now()
                 });
-                console.log('FCM token saved to database');
+                
+                return token;
             } catch (error) {
-                console.error('Error saving FCM token:', error);
+                console.error('Error getting FCM token:', error);
             }
         }
 
-        // Handle foreground messages (when app is open)
         onMessage(messaging, (payload) => {
             console.log('Foreground message received:', payload);
-            
             const title = payload.notification?.title || 'Shopify Support';
             const body = payload.notification?.body || 'New notification';
-            const icon = payload.data?.icon || '🔔';
-            
-            // Show Shopify-styled dropdown notification
-            showShopifyNotification(title, body, icon);
-            
-            // Play sound
+            showShopifyNotification(title, body);
             playWhatsAppSound();
         });
 
-        // Show Shopify-styled dropdown notification
-        function showShopifyNotification(title, message, icon = '🔔') {
-            console.log('Showing Shopify notification:', title, message);
-            
-            if (notificationTimeout) {
-                clearTimeout(notificationTimeout);
-            }
+        function showShopifyNotification(title, message) {
+            if (notificationTimeout) clearTimeout(notificationTimeout);
             
             notifTitle.textContent = title;
             notifMessage.textContent = message;
-            dropdownNotification.querySelector('.dropdown-notification-icon').textContent = icon;
-            
             dropdownNotification.classList.add('show');
             
             notificationTimeout = setTimeout(() => {
                 dropdownNotification.classList.remove('show');
             }, 5000);
+            
+            playWhatsAppSound();
         }
 
-        // Play WhatsApp sound
         function playWhatsAppSound() {
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                
                 const oscillator1 = audioContext.createOscillator();
                 const gainNode1 = audioContext.createGain();
                 oscillator1.connect(gainNode1);
@@ -1402,31 +1358,50 @@
             }
         }
 
-        // Setup notification listener
+        enableNotificationsBtn.addEventListener('click', async () => {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    notificationBanner.classList.remove('show');
+                    await getFCMToken();
+                    showShopifyNotification('✅ Notifications Enabled', 'You will receive alerts for new customers and messages');
+                }
+            } catch (error) {
+                console.error('Error requesting permission:', error);
+            }
+        });
+
+        // ==================== UPDATE AGENT STATS ====================
+        function updateAgentStats(sessions) {
+            if (!sessions) return;
+            const agentCounts = {};
+            AGENT_PERSONAS.forEach(agent => { agentCounts[agent.id] = 0; });
+            Object.values(sessions).forEach(session => {
+                if (!session.archived && session.assignedAgent) {
+                    agentCounts[session.assignedAgent] = (agentCounts[session.assignedAgent] || 0) + 1;
+                }
+            });
+            let statsHtml = '';
+            AGENT_PERSONAS.forEach(agent => {
+                const count = agentCounts[agent.id] || 0;
+                statsHtml += `<div class="agent-stat-item"><div class="agent-stat-initials">${agent.initials}</div><span>${agent.name.split(' ')[0]}: ${count}</span></div>`;
+            });
+            agentStats.innerHTML = statsHtml;
+        }
+
+        // ==================== NOTIFICATION LISTENER ====================
         function setupNotificationListener() {
             const sessionsRef = ref(database, 'sessions');
             onValue(sessionsRef, (snapshot) => {
                 const sessions = snapshot.val();
                 if (!sessions) return;
-
                 updateAgentStats(sessions);
-
                 Object.entries(sessions).forEach(([id, session]) => {
                     if (session.newCustomer && !notifiedCustomers.has(id)) {
                         notifiedCustomers.add(id);
-                        
                         const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
                         const agentName = agent ? agent.name : 'Support';
-                        
-                        // Show notification
-                        showShopifyNotification(
-                            '🆕 New Customer',
-                            `${session.customerName} joined - Assigned to ${agentName}`,
-                            '👤'
-                        );
-                        
-                        // Play sound
-                        playWhatsAppSound();
+                        showShopifyNotification('🆕 New Customer', `${session.customerName} joined - Assigned to ${agentName}`);
                     }
                 });
             });
@@ -1435,34 +1410,19 @@
             onValue(allMessagesRef, (snapshot) => {
                 const sessions = snapshot.val();
                 if (!sessions) return;
-
                 Object.entries(sessions).forEach(([sessionId, session]) => {
                     if (session.messages) {
                         const messageCount = Object.keys(session.messages).length;
-                        
                         if (lastMessageCounts[sessionId] && messageCount > lastMessageCounts[sessionId]) {
                             const messages = session.messages;
                             const messageKeys = Object.keys(messages);
                             const lastMsgKey = messageKeys[messageKeys.length - 1];
                             const lastMsg = messages[lastMsgKey];
-                            
                             if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
-                                const messagePreview = lastMsg.text.length > 60 
-                                    ? lastMsg.text.substring(0, 60) + '...' 
-                                    : lastMsg.text;
-                                
-                                showShopifyNotification(
-                                    `💬 ${session.customerName}`,
-                                    messagePreview,
-                                    '💬'
-                                );
-                                
-                                playWhatsAppSound();
-                                
+                                const messagePreview = lastMsg.text.length > 60 ? lastMsg.text.substring(0, 60) + '...' : lastMsg.text;
+                                showShopifyNotification(`💬 ${session.customerName}`, messagePreview);
                                 const newCount = (session.unreadByAdmin || 0) + 1;
-                                update(ref(database, `sessions/${sessionId}`), {
-                                    unreadByAdmin: newCount
-                                });
+                                update(ref(database, `sessions/${sessionId}`), { unreadByAdmin: newCount });
                             }
                         }
                         lastMessageCounts[sessionId] = messageCount;
@@ -1471,69 +1431,27 @@
             });
         }
 
-        // ==================== UPDATE AGENT STATS ====================
-        function updateAgentStats(sessions) {
-            if (!sessions) return;
-            
-            const agentCounts = {};
-            AGENT_PERSONAS.forEach(agent => { agentCounts[agent.id] = 0; });
-            
-            Object.values(sessions).forEach(session => {
-                if (!session.archived && session.assignedAgent) {
-                    agentCounts[session.assignedAgent] = (agentCounts[session.assignedAgent] || 0) + 1;
-                }
-            });
-            
-            let statsHtml = '';
-            AGENT_PERSONAS.forEach(agent => {
-                const count = agentCounts[agent.id] || 0;
-                statsHtml += `
-                    <div class="agent-stat-item">
-                        <div class="agent-stat-initials">${agent.initials}</div>
-                        <span>${agent.name.split(' ')[0]}: ${count}</span>
-                    </div>
-                `;
-            });
-            
-            agentStats.innerHTML = statsHtml;
-        }
-
-        // ==================== DELETE FUNCTION ====================
+        // ==================== DELETE/ARCHIVE FUNCTIONS ====================
         function deleteSession(sessionId, customerName) {
             if (confirm(`⚠️ Permanently delete chat with ${customerName}? This cannot be undone.`)) {
-                remove(ref(database, `sessions/${sessionId}`))
-                    .then(() => {
-                        console.log('Session deleted successfully:', sessionId);
-                        showShopifyNotification('✅ Deleted', `Chat with ${customerName} removed`, '🗑️');
-                        
-                        if (currentSessionId === sessionId) {
-                            goToInbox();
-                        }
-                        
-                        loadSessions();
-                    })
-                    .catch((error) => {
-                        console.error('Error deleting session:', error);
-                        alert('Failed to delete session. Please try again.');
-                    });
+                remove(ref(database, `sessions/${sessionId}`)).then(() => {
+                    showShopifyNotification('✅ Deleted', `Chat with ${customerName} removed`);
+                    if (currentSessionId === sessionId) goToInbox();
+                    loadSessions();
+                }).catch((error) => {
+                    console.error('Error deleting session:', error);
+                    alert('Failed to delete session.');
+                });
             }
         }
 
         function archiveSession(sessionId) {
             if (confirm('Archive this chat? It will be moved to the Archived tab.')) {
-                update(ref(database, `sessions/${sessionId}`), {
-                    archived: true,
-                    newCustomer: false,
-                    lastActivity: Date.now()
-                })
+                update(ref(database, `sessions/${sessionId}`), { archived: true, newCustomer: false, lastActivity: Date.now() })
                 .then(() => {
-                    console.log('Session archived:', sessionId);
-                    if (currentSessionId === sessionId) {
-                        goToInbox();
-                    }
+                    if (currentSessionId === sessionId) goToInbox();
                     loadSessions();
-                })
-                .catch((error) => {
+                }).catch((error) => {
                     console.error('Error archiving session:', error);
                     alert('Failed to archive session.');
                 });
@@ -1541,15 +1459,8 @@
         }
 
         function unarchiveSession(sessionId) {
-            update(ref(database, `sessions/${sessionId}`), {
-                archived: false,
-                newCustomer: false,
-                lastActivity: Date.now()
-            })
-            .then(() => {
-                console.log('Session unarchived:', sessionId);
-                loadSessions();
-            })
+            update(ref(database, `sessions/${sessionId}`), { archived: false, newCustomer: false, lastActivity: Date.now() })
+            .then(() => loadSessions())
             .catch((error) => {
                 console.error('Error unarchiving session:', error);
                 alert('Failed to unarchive session.');
@@ -1563,55 +1474,33 @@
             chatView.classList.add('hidden');
             inputContainer.classList.add('hidden');
             typingIndicator.classList.remove('show');
-            
-            document.querySelectorAll('.session-item.active').forEach(el => {
-                el.classList.remove('active');
-            });
-            
+            document.querySelectorAll('.session-item.active').forEach(el => el.classList.remove('active'));
             loadSessions();
         }
         
         function goToChat(sessionId, session) {
             currentSessionId = sessionId;
             currentCustomerInitials = getInitials(session.customerName);
-            
             const assignedAgent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
-            
             inboxView.classList.add('hidden');
             chatView.classList.remove('hidden');
             inputContainer.classList.remove('hidden');
-            
             customerNameSpan.textContent = session.customerName;
             document.getElementById('customerEmailHeader').textContent = session.customerEmail;
-            
             if (assignedAgent) {
-                assignedAgentDisplay.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <div style="width: 24px; height: 24px; border-radius: 50%; background: #e8f5e9; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #2e7d32;">${assignedAgent.initials}</div>
-                        <span>${assignedAgent.name}</span>
-                    </div>
-                `;
+                assignedAgentDisplay.innerHTML = `<div style="display: flex; align-items: center; gap: 6px;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #e8f5e9; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #2e7d32;">${assignedAgent.initials}</div><span>${assignedAgent.name}</span></div>`;
             }
-            
-            update(ref(database, `sessions/${sessionId}`), { 
-                unreadByAdmin: 0,
-                newCustomer: false
-            });
-            
-            if (adminPresenceRef) {
-                set(adminPresenceRef, false);
-            }
+            update(ref(database, `sessions/${sessionId}`), { unreadByAdmin: 0, newCustomer: false });
+            if (adminPresenceRef) set(adminPresenceRef, false);
             adminPresenceRef = ref(database, `sessions/${sessionId}/adminOnline`);
             set(adminPresenceRef, true);
             onDisconnect(adminPresenceRef).set(false);
-            
             listenForMessages(sessionId);
             listenForCustomerTyping(sessionId);
             messageInput.focus();
         }
 
         // ==================== CORE FUNCTIONS ====================
-        
         messagesContainer.addEventListener('scroll', () => {
             const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
             userScrolledUp = !isAtBottom;
@@ -1620,14 +1509,9 @@
         backToInboxBtn.addEventListener('click', goToInbox);
 
         window.addEventListener('load', async () => {
-            // Check if PWA
-            isPWA = window.matchMedia('(display-mode: standalone)').matches || 
-                    window.navigator.standalone === true;
-            
-            // Register FCM service worker
+            isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
             await registerFCMServiceWorker();
             
-            // Check saved admin session
             const savedAdmin = localStorage.getItem('adminSession');
             if (savedAdmin) {
                 try {
@@ -1635,7 +1519,6 @@
                     const loginTime = adminData.timestamp;
                     const now = Date.now();
                     const hoursSinceLogin = (now - loginTime) / (1000 * 60 * 60);
-                    
                     if (hoursSinceLogin < 24) {
                         adminNameDisplay.textContent = 'Admin';
                         adminInitials.textContent = 'AD';
@@ -1660,9 +1543,7 @@
         }
 
         function scrollToBottom() {
-            if (!userScrolledUp) {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
+            if (!userScrolledUp) messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
         function getInitials(name) {
@@ -1670,20 +1551,13 @@
         }
 
         // ==================== EVENT LISTENERS ====================
-
         endChatBtn.addEventListener('click', () => {
             if (!currentSessionId) return;
-            
             if (confirm('Send "Chat Ended" notification to customer?')) {
                 try {
                     const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
-                    set(messageRef, {
-                        text: 'Chat session ended by support team.',
-                        type: 'notification',
-                        timestamp: serverTimestamp()
-                    });
-                    
-                    showShopifyNotification('Chat Ended', 'Chat has been ended', '✅');
+                    set(messageRef, { text: 'Chat session ended by support team.', type: 'notification', timestamp: serverTimestamp() });
+                    showShopifyNotification('Chat Ended', 'Chat has been ended');
                     setTimeout(scrollToBottom, 100);
                 } catch (error) {
                     console.error('Error ending chat:', error);
@@ -1696,22 +1570,14 @@
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-
             if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-                localStorage.setItem('adminSession', JSON.stringify({
-                    username: username,
-                    timestamp: Date.now()
-                }));
-
+                localStorage.setItem('adminSession', JSON.stringify({ username: username, timestamp: Date.now() }));
                 adminNameDisplay.textContent = 'Admin';
                 adminInitials.textContent = 'AD';
                 adminEmail.textContent = 'admin@support.com';
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
-                
-                // Register FCM service worker after login
                 await registerFCMServiceWorker();
-                
                 loadSessions();
                 setupNotificationListener();
                 goToInbox();
@@ -1722,9 +1588,7 @@
         });
 
         logoutBtn.addEventListener('click', () => {
-            if (currentSessionId && adminPresenceRef) {
-                set(adminPresenceRef, false);
-            }
+            if (currentSessionId && adminPresenceRef) set(adminPresenceRef, false);
             localStorage.removeItem('adminSession');
             dashboard.classList.remove('active');
             loginContainer.style.display = 'flex';
@@ -1746,40 +1610,30 @@
         });
 
         // ==================== SESSION MANAGEMENT ====================
-
         function loadSessions() {
             const sessionsRef = ref(database, 'sessions');
             onValue(sessionsRef, (snapshot) => {
                 const sessions = snapshot.val();
                 sessionsList.innerHTML = '';
-
                 if (!sessions) {
                     sessionsList.innerHTML = `<div class="empty-state">No ${showingArchived ? 'archived' : 'active'} sessions</div>`;
                     return;
                 }
-
-                const filteredSessions = Object.entries(sessions).filter(([id, session]) => {
-                    return showingArchived ? session.archived : !session.archived;
-                });
-
+                const filteredSessions = Object.entries(sessions).filter(([id, session]) => showingArchived ? session.archived : !session.archived);
                 if (filteredSessions.length === 0) {
                     sessionsList.innerHTML = `<div class="empty-state">No ${showingArchived ? 'archived' : 'active'} sessions</div>`;
                     return;
                 }
-
                 filteredSessions.sort((a, b) => {
                     const timeA = a[1].lastActivity || a[1].startedAt || 0;
                     const timeB = b[1].lastActivity || b[1].startedAt || 0;
                     return timeB - timeA;
                 });
-
                 filteredSessions.forEach(([id, session]) => {
                     const sessionDiv = createSessionElement(id, session);
                     sessionsList.appendChild(sessionDiv);
                 });
-                
                 updateAgentStats(sessions);
-                
             }, (error) => {
                 console.error('Error loading sessions:', error);
                 showConnectionError();
@@ -1790,10 +1644,7 @@
             const sessionDiv = document.createElement('div');
             const isNewCustomer = session.newCustomer && !showingArchived;
             sessionDiv.className = `session-item ${id === currentSessionId ? 'active' : ''} ${isNewCustomer ? 'new-customer' : ''}`;
-            
-            const time = session.lastActivity ? formatTime(session.lastActivity) : 
-                        session.startedAt ? formatTime(session.startedAt) : '';
-            
+            const time = session.lastActivity ? formatTime(session.lastActivity) : session.startedAt ? formatTime(session.startedAt) : '';
             let lastMessagePreview = '';
             if (session.messages) {
                 const messages = Object.values(session.messages);
@@ -1802,61 +1653,25 @@
                     lastMessagePreview = lastMsg.text.substring(0, 40) + (lastMsg.text.length > 40 ? '...' : '');
                 }
             }
-            
             const assignedAgent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
-            const agentDisplay = assignedAgent ? 
-                `<span class="assigned-agent-badge">
-                    <div style="width: 16px; height: 16px; border-radius: 50%; background: #e8f5e9; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #2e7d32;">${assignedAgent.initials}</div>
-                    ${assignedAgent.name.split(' ')[0]}
-                </span>` : '';
-            
-            const actions = showingArchived 
-                ? `<button class="session-btn unarchive" data-id="${id}">↩️ Unarchive</button>
-                   <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`
-                : `<button class="session-btn archive" data-id="${id}">📦 Archive</button>
-                   <button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`;
-            
+            const agentDisplay = assignedAgent ? `<span class="assigned-agent-badge"><div style="width: 16px; height: 16px; border-radius: 50%; background: #e8f5e9; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #2e7d32;">${assignedAgent.initials}</div>${assignedAgent.name.split(' ')[0]}</span>` : '';
+            const actions = showingArchived ? `<button class="session-btn unarchive" data-id="${id}">↩️ Unarchive</button><button class="session-btn delete" data-id="${id}">🗑️ Delete</button>` : `<button class="session-btn archive" data-id="${id}">📦 Archive</button><button class="session-btn delete" data-id="${id}">🗑️ Delete</button>`;
             const newBadge = isNewCustomer ? '<span class="new-customer-badge">NEW</span>' : '';
             const unreadCount = session.unreadByAdmin || 0;
-            
-            sessionDiv.innerHTML = `
-                <div class="session-header">
-                    <div class="session-name">
-                        <span class="online-dot ${session.customerOnline ? 'online' : ''}"></span>
-                        ${session.customerName}${newBadge}
-                        ${agentDisplay}
-                    </div>
-                    <div class="session-time">${time}</div>
-                </div>
-                <div class="session-email">${session.customerEmail}</div>
-                <div class="session-preview">${lastMessagePreview || 'No messages yet'}</div>
-                <div class="session-actions">
-                    ${actions}
-                </div>
-                <div class="unread-badge ${unreadCount > 0 ? 'show' : ''}">${unreadCount}</div>
-            `;
-
+            sessionDiv.innerHTML = `<div class="session-header"><div class="session-name"><span class="online-dot ${session.customerOnline ? 'online' : ''}"></span>${session.customerName}${newBadge}${agentDisplay}</div><div class="session-time">${time}</div></div><div class="session-email">${session.customerEmail}</div><div class="session-preview">${lastMessagePreview || 'No messages yet'}</div><div class="session-actions">${actions}</div><div class="unread-badge ${unreadCount > 0 ? 'show' : ''}">${unreadCount}</div>`;
             const actionButtons = sessionDiv.querySelectorAll('.session-btn');
             actionButtons.forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const sessionId = btn.dataset.id;
-                    if (btn.classList.contains('archive')) {
-                        archiveSession(sessionId);
-                    } else if (btn.classList.contains('unarchive')) {
-                        unarchiveSession(sessionId);
-                    } else if (btn.classList.contains('delete')) {
-                        deleteSession(sessionId, session.customerName);
-                    }
+                    if (btn.classList.contains('archive')) archiveSession(sessionId);
+                    else if (btn.classList.contains('unarchive')) unarchiveSession(sessionId);
+                    else if (btn.classList.contains('delete')) deleteSession(sessionId, session.customerName);
                 });
             });
-
             sessionDiv.addEventListener('click', (e) => {
-                if (!e.target.classList.contains('session-btn')) {
-                    goToChat(id, session);
-                }
+                if (!e.target.classList.contains('session-btn')) goToChat(id, session);
             });
-
             return sessionDiv;
         }
 
@@ -1865,7 +1680,6 @@
             const date = new Date(timestamp);
             const now = new Date();
             const diff = (now - date) / 1000;
-            
             if (diff < 60) return 'now';
             if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
             if (diff < 86400) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1873,28 +1687,14 @@
         }
 
         // ==================== CHAT FUNCTIONS ====================
-
         function sendMessage() {
             if (!currentSessionId) return;
-            
             const message = messageInput.value.trim();
             if (!message) return;
-
             try {
                 const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
-                set(messageRef, {
-                    text: message,
-                    sender: 'admin',
-                    senderName: 'Support Team',
-                    senderInitials: 'SP',
-                    timestamp: serverTimestamp(),
-                    read: false
-                });
-
-                update(ref(database, `sessions/${currentSessionId}`), {
-                    lastActivity: Date.now()
-                });
-
+                set(messageRef, { text: message, sender: 'admin', senderName: 'Support Team', senderInitials: 'SP', timestamp: serverTimestamp(), read: false });
+                update(ref(database, `sessions/${currentSessionId}`), { lastActivity: Date.now() });
                 messageInput.value = '';
                 userScrolledUp = false;
                 stopTyping();
@@ -1906,18 +1706,14 @@
         }
 
         sendButton.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
         messageInput.addEventListener('input', () => {
             if (!currentSessionId) return;
-
             if (!isTyping) {
                 isTyping = true;
                 set(ref(database, `sessions/${currentSessionId}/adminTyping`), true);
             }
-
             clearTimeout(typingTimeout);
             typingTimeout = setTimeout(stopTyping, 1000);
         });
@@ -1933,17 +1729,12 @@
             onValue(messagesRef, (snapshot) => {
                 const messages = snapshot.val();
                 messagesContainer.innerHTML = '<div class="date-divider">Today</div>';
-
                 if (messages) {
                     Object.entries(messages).forEach(([id, msg]) => {
-                        if (msg.type === 'notification') {
-                            displayNotification(msg);
-                        } else {
-                            displayMessage(msg, id);
-                        }
+                        if (msg.type === 'notification') displayNotification(msg);
+                        else displayMessage(msg, id);
                     });
                 }
-
                 setTimeout(scrollToBottom, 100);
             }, (error) => {
                 console.error('Error listening for messages:', error);
@@ -1961,42 +1752,27 @@
         function displayMessage(msg, id) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${msg.sender}`;
-
             const initialsDiv = document.createElement('div');
             initialsDiv.className = 'message-initials';
-            
-            if (msg.sender === 'admin') {
-                initialsDiv.textContent = msg.senderInitials || 'SP';
-            } else {
-                initialsDiv.textContent = currentCustomerInitials || 'CU';
-            }
-
+            if (msg.sender === 'admin') initialsDiv.textContent = msg.senderInitials || 'SP';
+            else initialsDiv.textContent = currentCustomerInitials || 'CU';
             const content = document.createElement('div');
             content.className = 'message-content';
-
             if (msg.sender === 'admin' && msg.senderName) {
                 const nameDiv = document.createElement('div');
                 nameDiv.className = 'agent-name';
                 nameDiv.textContent = msg.senderName;
                 content.appendChild(nameDiv);
             }
-
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
             bubble.textContent = msg.text;
-
             const info = document.createElement('div');
             info.className = 'message-info';
-
             const time = msg.timestamp ? formatTime(msg.timestamp) : 'now';
             const receipt = msg.read ? '✓✓' : '✓';
-
-            if (msg.sender === 'admin') {
-                info.innerHTML = `<span>${time}</span><span>${receipt}</span>`;
-            } else {
-                info.innerHTML = `<span>${time}</span>`;
-            }
-
+            if (msg.sender === 'admin') info.innerHTML = `<span>${time}</span><span>${receipt}</span>`;
+            else info.innerHTML = `<span>${time}</span>`;
             content.appendChild(bubble);
             content.appendChild(info);
             messageDiv.appendChild(initialsDiv);
@@ -2008,11 +1784,8 @@
             const typingRef = ref(database, `sessions/${sessionId}/customerTyping`);
             onValue(typingRef, (snapshot) => {
                 const typing = snapshot.val();
-                if (typing) {
-                    typingIndicator.classList.add('show');
-                } else {
-                    typingIndicator.classList.remove('show');
-                }
+                if (typing) typingIndicator.classList.add('show');
+                else typingIndicator.classList.remove('show');
             });
         }
     </script>
