@@ -16,6 +16,7 @@
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/5968/5968705.png">
     
     <style>
+        /* ALL YOUR EXISTING STYLES - KEEP THEM EXACTLY AS THEY WERE */
         * {
             margin: 0;
             padding: 0;
@@ -269,11 +270,11 @@
             .logout-btn {
                 padding: 6px 12px;
             }
-            
+
             .logout-btn span {
                 display: none;
             }
-            
+
             .logout-btn svg {
                 width: 20px;
                 height: 20px;
@@ -1138,9 +1139,9 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
-        import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+        import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
@@ -1273,14 +1274,18 @@
                     });
                     console.log('FCM Service Worker registered successfully:', registration);
                     
+                    // Wait for the service worker to be ready
                     await navigator.serviceWorker.ready;
                     console.log('Service Worker is ready');
                     
-                    if (Notification.permission === 'granted') {
-                        await getFCMToken();
-                    } else if (Notification.permission === 'default') {
-                        notificationBanner.classList.add('show');
-                    }
+                    // Add a 1-second delay to ensure everything is fully activated
+                    setTimeout(async () => {
+                        if (Notification.permission === 'granted') {
+                            await getFCMToken();
+                        } else if (Notification.permission === 'default') {
+                            notificationBanner.classList.add('show');
+                        }
+                    }, 1000);
                     
                 } catch (error) {
                     console.error('Service Worker registration failed:', error);
@@ -1290,11 +1295,20 @@
 
         async function getFCMToken() {
             try {
+                // Double-check service worker is active
+                const registration = await navigator.serviceWorker.ready;
+                if (!registration.active) {
+                    console.log('Waiting for service worker to activate...');
+                    setTimeout(() => getFCMToken(), 1000);
+                    return;
+                }
+                
                 const token = await getToken(messaging, {
                     vapidKey: VAPID_KEY
                 });
                 console.log('FCM Token obtained:', token);
                 
+                // Save token to database
                 const tokenRef = ref(database, 'adminFCMTokens/admin');
                 await set(tokenRef, {
                     token: token,
