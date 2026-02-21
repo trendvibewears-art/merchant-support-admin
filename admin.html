@@ -1256,7 +1256,7 @@
             deferredPrompt = null;
         });
 
-        // ==================== FCM NOTIFICATION SETUP ====================
+        // ==================== FCM NOTIFICATION SETUP (FIXED) ====================
 
         async function registerFCMServiceWorker() {
             if ('serviceWorker' in navigator) {
@@ -1274,18 +1274,8 @@
                     });
                     console.log('FCM Service Worker registered successfully:', registration);
                     
-                    // Wait for the service worker to be ready
-                    await navigator.serviceWorker.ready;
-                    console.log('Service Worker is ready');
-                    
-                    // Add a 1-second delay to ensure everything is fully activated
-                    setTimeout(async () => {
-                        if (Notification.permission === 'granted') {
-                            await getFCMToken();
-                        } else if (Notification.permission === 'default') {
-                            notificationBanner.classList.add('show');
-                        }
-                    }, 1000);
+                    // Wait for the service worker to be ready and active
+                    await waitForServiceWorkerActivation();
                     
                 } catch (error) {
                     console.error('Service Worker registration failed:', error);
@@ -1293,31 +1283,99 @@
             }
         }
 
+        async function waitForServiceWorkerActivation() {
+            return new Promise(async (resolve) => {
+                // Check if there's an active service worker
+                const registration = await navigator.serviceWorker.ready;
+                
+                if (registration.active) {
+                    console.log('Service Worker is active immediately');
+                    await handleNotificationPermission();
+                    resolve();
+                    return;
+                }
+                
+                // If not active, wait for state change
+                console.log('Waiting for service worker to activate...');
+                
+                const timeout = setTimeout(() => {
+                    console.log('Service worker activation timeout - retrying');
+                    handleNotificationPermission();
+                    resolve();
+                }, 5000);
+                
+                if (registration.installing) {
+                    registration.installing.addEventListener('statechange', (e) => {
+                        if (e.target.state === 'activated') {
+                            console.log('Service Worker activated');
+                            clearTimeout(timeout);
+                            handleNotificationPermission();
+                            resolve();
+                        }
+                    });
+                } else if (registration.waiting) {
+                    registration.waiting.addEventListener('statechange', (e) => {
+                        if (e.target.state === 'activated') {
+                            console.log('Service Worker activated');
+                            clearTimeout(timeout);
+                            handleNotificationPermission();
+                            resolve();
+                        }
+                    });
+                }
+            });
+        }
+
+        async function handleNotificationPermission() {
+            if (Notification.permission === 'granted') {
+                // Small delay to ensure everything is ready
+                setTimeout(async () => {
+                    await getFCMToken();
+                }, 500);
+            } else if (Notification.permission === 'default') {
+                notificationBanner.classList.add('show');
+            }
+        }
+
         async function getFCMToken() {
             try {
-                // Double-check service worker is active
+                console.log('Attempting to get FCM token...');
+                
+                // Verify service worker is active
                 const registration = await navigator.serviceWorker.ready;
                 if (!registration.active) {
-                    console.log('Waiting for service worker to activate...');
-                    setTimeout(() => getFCMToken(), 1000);
-                    return;
+                    throw new Error('Service worker not active');
                 }
                 
                 const token = await getToken(messaging, {
                     vapidKey: VAPID_KEY
                 });
-                console.log('FCM Token obtained:', token);
                 
-                // Save token to database
-                const tokenRef = ref(database, 'adminFCMTokens/admin');
-                await set(tokenRef, {
-                    token: token,
-                    timestamp: Date.now()
-                });
-                
-                return token;
+                if (token) {
+                    console.log('✅ FCM Token obtained successfully:', token);
+                    
+                    // Save token to database
+                    const tokenRef = ref(database, 'adminFCMTokens/admin');
+                    await set(tokenRef, {
+                        token: token,
+                        timestamp: Date.now()
+                    });
+                    
+                    // Show success notification
+                    showShopifyNotification('✅ Notifications Ready', 'You will now receive alerts');
+                    
+                    return token;
+                } else {
+                    console.log('No FCM token received');
+                }
             } catch (error) {
                 console.error('Error getting FCM token:', error);
+                
+                // If error is about no active service worker, retry after delay
+                if (error.message?.includes('no active Service Worker')) {
+                    console.log('Retrying FCM token in 2 seconds...');
+                    setTimeout(() => getFCMToken(), 2000);
+                }
             }
         }
 
