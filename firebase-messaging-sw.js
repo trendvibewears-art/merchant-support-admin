@@ -1,6 +1,6 @@
-// firebase-messaging-sw.js - FIXED VERSION
-importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js');
-importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js');
+// firebase-messaging-sw.js
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
     apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
@@ -25,7 +25,7 @@ messaging.onBackgroundMessage(function(payload) {
         badge: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
         vibrate: [200, 100, 200],
         data: payload.data || {},
-        actions: [{ action: 'open', title: 'Open' }, { action: 'close', title: 'Dismiss' }],
+        actions: [{ action: 'open', title: 'Open' }],
         requireInteraction: true
     };
     return self.registration.showNotification(notificationTitle, notificationOptions);
@@ -34,13 +34,7 @@ messaging.onBackgroundMessage(function(payload) {
 self.addEventListener('notificationclick', function(event) {
     event.notification.close();
     const urlToOpen = '/admin.html';
-    event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-        for (var i = 0; i < clientList.length; i++) {
-            var client = clientList[i];
-            if (client.url.includes('admin.html') && 'focus' in client) return client.focus();
-        }
-        return clients.openWindow(urlToOpen);
-    }));
+    event.waitUntil(clients.openWindow(urlToOpen));
 });
 
 self.addEventListener('install', function(event) { self.skipWaiting(); });
