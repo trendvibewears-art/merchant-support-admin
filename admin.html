@@ -1464,6 +1464,25 @@ function testPipedream() {
             const body = payload.notification?.body || 'New notification';
             showShopifyNotification(title, body);
             playWhatsAppSound();
+            // Add this function to send data to Pipedream
+async function sendToPipedream(data) {
+  const webhookUrl = 'https://eo990xxerzy11gn.m.pipedream.net';
+  
+  try {
+    console.log("📤 Sending to Pipedream:", data.type);
+    
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.text();
+    console.log("✅ Pipedream response:", result);
+  } catch (error) {
+    console.error("❌ Failed to send to Pipedream:", error);
+  }
+}
         });
 
         function showShopifyNotification(title, message, icon = '🔔') {
@@ -1525,100 +1544,124 @@ function testPipedream() {
 
         // ==================== FIXED NOTIFICATION LISTENER ====================
         function setupNotificationListener() {
-            const sessionsRef = ref(database, 'sessions');
-            let processingNotifications = false;
-            
-            onValue(sessionsRef, (snapshot) => {
-                // Prevent recursive updates
-                if (processingNotifications) return;
-                processingNotifications = true;
-                
-                try {
-                    const sessions = snapshot.val();
-                    if (!sessions) return;
+  const sessionsRef = ref(database, 'sessions');
+  let processingNotifications = false;
+  
+  onValue(sessionsRef, (snapshot) => {
+    if (processingNotifications) return;
+    processingNotifications = true;
+    
+    try {
+      const sessions = snapshot.val();
+      if (!sessions) return;
 
-                    updateAgentStats(sessions);
+      updateAgentStats(sessions);
 
-                    Object.entries(sessions).forEach(([id, session]) => {
-                        // New customer notification - but don't update anything here
-                        if (session.newCustomer && !notifiedCustomers.has(id)) {
-                            notifiedCustomers.add(id);
-                            const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
-                            const agentName = agent ? agent.name : 'Support';
-                            
-                            // Only show notification, don't update database
-                            showShopifyNotification(
-                                '🆕 New Customer', 
-                                `${session.customerName} joined - Assigned to ${agentName}`,
-                                '👤'
-                            );
-                        }
-                    });
-                } finally {
-                    processingNotifications = false;
-                }
-            });
-
-            const allMessagesRef = ref(database, 'sessions');
-            let processingMessages = false;
-            
-            onValue(allMessagesRef, (snapshot) => {
-                // Prevent recursive updates
-                if (processingMessages) return;
-                processingMessages = true;
-                
-                try {
-                    const sessions = snapshot.val();
-                    if (!sessions) return;
-
-                    Object.entries(sessions).forEach(([sessionId, session]) => {
-                        if (session.messages) {
-                            const messageCount = Object.keys(session.messages).length;
-                            
-                            // Only process if this is a new message
-                            if (lastMessageCounts[sessionId] !== undefined && 
-                                messageCount > lastMessageCounts[sessionId]) {
-                                
-                                const messages = session.messages;
-                                const messageKeys = Object.keys(messages);
-                                const lastMsgKey = messageKeys[messageKeys.length - 1];
-                                const lastMsg = messages[lastMsgKey];
-                                
-                                if (lastMsg && lastMsg.sender === 'customer' && currentSessionId !== sessionId) {
-                                    const messagePreview = lastMsg.text.length > 60 
-                                        ? lastMsg.text.substring(0, 60) + '...' 
-                                        : lastMsg.text;
-                                    
-                                    showShopifyNotification(
-                                        `💬 ${session.customerName}`,
-                                        messagePreview,
-                                        '💬'
-                                    );
-                                    
-                                    // Update unread count WITHOUT triggering recursive updates
-                                    // Use a separate reference with a once() operation
-                                    get(ref(database, `sessions/${sessionId}`)).then((dataSnapshot) => {
-                                        const data = dataSnapshot.val();
-                                        const currentUnread = data?.unreadByAdmin || 0;
-                                        
-                                        // Use set instead of update to avoid triggering complex merges
-                                        set(ref(database, `sessions/${sessionId}/unreadByAdmin`), 
-                                            currentUnread + 1)
-                                            .catch(err => console.error('Error updating unread:', err));
-                                    });
-                                }
-                            }
-                            lastMessageCounts[sessionId] = messageCount;
-                        } else {
-                            lastMessageCounts[sessionId] = 0;
-                        }
-                    });
-                } finally {
-                    processingMessages = false;
-                }
-            });
+      Object.entries(sessions).forEach(([id, session]) => {
+        // New customer notification
+        if (session.newCustomer && !notifiedCustomers.has(id)) {
+          notifiedCustomers.add(id);
+          const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
+          const agentName = agent ? agent.name : 'Support';
+          
+          // SEND TO PIPEDREAM
+          sendToPipedream({
+            type: 'new_customer',
+            newCustomer: true,
+            customerName: session.customerName,
+            customerEmail: session.customerEmail,
+            agentName: agentName,
+            sessionId: id,
+            timestamp: Date.now()
+          });
+          
+          showShopifyNotification(
+            '🆕 New Customer', 
+            `${session.customerName} joined - Assigned to ${agentName}`,
+            '👤'
+          );
         }
+      });
+    } finally {
+      processingNotifications = false;
+    }
+  });
 
+  const allMessagesRef = ref(database, 'sessions');
+  let processingMessages = false;
+  
+  onValue(allMessagesRef, (snapshot) => {
+    if (processingMessages) return;
+    processingMessages = true;
+    
+    try {
+      const sessions = snapshot.val();
+      if (!sessions) return;
+
+      Object.entries(sessions).forEach(([sessionId, session]) => {
+        if (session.messages) {
+          const messageCount = Object.keys(session.messages).length;
+          
+          if (lastMessageCounts[sessionId] !== undefined && 
+              messageCount > lastMessageCounts[sessionId]) {
+            
+            const messages = session.messages;
+            const messageKeys = Object.keys(messages);
+            const lastMsgKey = messageKeys[messageKeys.length - 1];
+            const lastMsg = messages[lastMsgKey];
+            
+            // CUSTOMER MESSAGE - notify admin
+            if (lastMsg && lastMsg.sender === 'customer') {
+              
+              // SEND TO PIPEDREAM
+              sendToPipedream({
+                type: 'new_message',
+                sender: 'customer',
+                message: lastMsg.text,
+                customerName: session.customerName,
+                customerEmail: session.customerEmail,
+                sessionId: sessionId,
+                timestamp: Date.now()
+              });
+              
+              if (currentSessionId !== sessionId) {
+                const messagePreview = lastMsg.text.length > 60 
+                  ? lastMsg.text.substring(0, 60) + '...' 
+                  : lastMsg.text;
+                
+                showShopifyNotification(
+                  `💬 ${session.customerName}`,
+                  messagePreview,
+                  '💬'
+                );
+              }
+            }
+            
+            // ADMIN REPLY - notify customer
+            if (lastMsg && lastMsg.sender === 'admin') {
+              
+              // SEND TO PIPEDREAM
+              sendToPipedream({
+                type: 'admin_reply',
+                sender: 'admin',
+                message: lastMsg.text,
+                agentName: lastMsg.senderName || 'Support',
+                agentInitials: lastMsg.senderInitials || 'SP',
+                sessionId: sessionId,
+                timestamp: Date.now()
+              });
+            }
+          }
+          lastMessageCounts[sessionId] = messageCount;
+        } else {
+          lastMessageCounts[sessionId] = 0;
+        }
+      });
+    } finally {
+      processingMessages = false;
+    }
+  });
+}
         // ==================== UPDATE AGENT STATS ====================
         function updateAgentStats(sessions) {
             if (!sessions) return;
