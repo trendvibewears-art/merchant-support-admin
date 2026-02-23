@@ -2004,6 +2004,47 @@
                 });
                 
                 set(ref(database, `sessions/${currentSessionId}/lastActivity`), Date.now());
+
+                // Add this function to your existing script
+window.checkMobileOneSignal = function() {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    let message = "📱 MOBILE DIAGNOSTIC\n\n";
+    message += `Mobile Device: ${isMobile ? '✅ Yes' : '❌ No'}\n`;
+    message += `PWA Installed: ${isStandalone ? '✅ Yes' : '❌ No'}\n`;
+    message += `iOS Device: ${isIOS ? '✅ Yes' : '❌ No'}\n\n`;
+    
+    if (window.OneSignal) {
+        window.OneSignal.User.getPushSubscription().then(sub => {
+            message += `OneSignal User ID: ${sub?.id ? '✅ ' + sub.id.substring(0, 15) + '...' : '❌ Not subscribed'}\n`;
+            message += `Subscribed: ${sub?.id ? 'Yes' : 'No'}\n\n`;
+            
+            if (!sub?.id && isMobile) {
+                message += "⚠️ NOT SUBSCRIBED ON MOBILE!\n";
+                if (isIOS && !isStandalone) {
+                    message += "\n📱 iOS REQUIREMENT:\n";
+                    message += "1. Tap Share button\n";
+                    message += "2. Add to Home Screen\n";
+                    message += "3. Open from home screen\n";
+                    message += "4. Allow notifications";
+                } else if (/Android/i.test(navigator.userAgent)) {
+                    message += "\n🤖 Android CHECK:\n";
+                    message += "1. Chrome settings → Notifications\n";
+                    message += "2. Site settings → Allow\n";
+                    message += "3. Battery optimization off";
+                }
+            } else if (sub?.id && isMobile && !isStandalone && isIOS) {
+                message += "\n⚠️ iOS: Add to Home Screen for background notifications!";
+            }
+            
+            alert(message);
+        });
+    } else {
+        alert("❌ OneSignal not loaded");
+    }
+};
                 
                 // Send OneSignal notification to customer
                 const assignedAgent = AGENT_PERSONAS.find(a => a.id === currentCustomerInitials);
