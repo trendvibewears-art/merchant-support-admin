@@ -2051,50 +2051,54 @@ function testPipedream() {
         }
     </script>
     <script>
-// Pipedream test function
+// Pipedream test function - FIXED VERSION
 document.addEventListener('DOMContentLoaded', function() {
     const testBtn = document.getElementById('pipedreamTestBtn');
     if (testBtn) {
         testBtn.addEventListener('click', function() {
             const webhookUrl = 'https://eo990xxerzy11gn.m.pipedream.net';
             
-            // Show feedback
+            // Store original text
+            const originalText = testBtn.textContent;
             testBtn.textContent = '⏳ Sending...';
-            testBtn.style.opacity = '0.7';
+            testBtn.disabled = true;
             
+            // Don't use currentSessionId - it's not defined here
             const testData = {
                 test: true,
                 message: "Hello from Shopify Admin!",
                 timestamp: Date.now(),
-                source: "admin_dashboard",
-                sessionId: currentSessionId || "no-session"
+                source: "admin_dashboard"
+                // Removed sessionId reference
             };
             
+            // Send to Pipedream
             fetch(webhookUrl, {
                 method: 'POST',
+                mode: 'no-cors', // Bypass CORS
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(testData)
             })
-            .then(response => response.json())
-            .then(data => {
+            .then(() => {
                 testBtn.textContent = '✅ Sent!';
                 testBtn.style.background = '#4CAF50';
+                
                 setTimeout(() => {
-                    testBtn.textContent = '🔔 Test Pipedream';
+                    testBtn.textContent = originalText;
                     testBtn.style.background = '#95BF47';
-                    testBtn.style.opacity = '1';
+                    testBtn.disabled = false;
                 }, 2000);
-                console.log('Success:', data);
             })
             .catch(error => {
                 testBtn.textContent = '❌ Failed';
                 testBtn.style.background = '#f44336';
-                setTimeout(() => {
-                    testBtn.textContent = '🔔 Test Pipedream';
-                    testBtn.style.background = '#95BF47';
-                    testBtn.style.opacity = '1';
-                }, 2000);
                 console.error('Error:', error);
+                
+                setTimeout(() => {
+                    testBtn.textContent = originalText;
+                    testBtn.style.background = '#95BF47';
+                    testBtn.disabled = false;
+                }, 2000);
             });
         });
     }
