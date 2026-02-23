@@ -2108,42 +2108,75 @@ async function sendToPipedream(data) {
             });
         }
     </script>
-    <script>
-function testPipedream() {
-    const webhookUrl = 'https://eo990xxerzy11gn.m.pipedream.net';
-    const btn = event.target;
-    const originalText = btn.textContent;
+    <!-- ===== ONESIGNAL TEST SECTION ===== -->
+<div style="position: fixed; bottom: 20px; right: 20px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10000; border: 2px solid #95BF47;" id="onesignalTestPanel">
+    <h4 style="margin: 0 0 10px 0; color: #333;">🔔 OneSignal Test</h4>
+    <button onclick="testOneSignal()" style="background: #95BF47; color: white; border: none; padding: 8px 16px; border-radius: 5px; margin-right: 5px; cursor: pointer;">
+        Test Status
+    </button>
+    <button onclick="requestOneSignal()" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 5px; margin-right: 5px; cursor: pointer;">
+        Allow
+    </button>
+    <button onclick="removeTestPanel()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+        Remove
+    </button>
+    <div id="onesignalStatus" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+</div>
+
+<script>
+// OneSignal test functions
+function updateStatus(message) {
+    document.getElementById('onesignalStatus').innerHTML = message;
+}
+
+function testOneSignal() {
+    updateStatus("Checking OneSignal...");
     
-    btn.textContent = '⏳ Sending...';
-    btn.disabled = true;
+    if (window.OneSignal) {
+        OneSignal.User.getPushSubscription().then(sub => {
+            if (sub && sub.id) {
+                updateStatus(`✅ Subscribed!<br>User ID: ${sub.id.substring(0, 20)}...`);
+                console.log("OneSignal User ID:", sub.id);
+            } else {
+                updateStatus("❌ Not subscribed yet. Click 'Allow'");
+            }
+        }).catch(err => {
+            updateStatus("❌ Error: " + err.message);
+        });
+    } else {
+        updateStatus("❌ OneSignal not loaded");
+    }
+}
+
+function requestOneSignal() {
+    updateStatus("Requesting permission...");
     
-    const testData = {
-        test: true,
-        message: "Hello from Shopify Admin!",
-        timestamp: Date.now()
-    };
-    
-    fetch(webhookUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testData)
-    })
-    .then(() => {
-        btn.textContent = '✅ Sent!';
-        setTimeout(() => {
-            btn.textContent = originalText;
-            btn.disabled = false;
-        }, 2000);
-    })
-    .catch(() => {
-        btn.textContent = '❌ Failed';
-        setTimeout(() => {
-            btn.textContent = originalText;
-            btn.disabled = false;
-        }, 2000);
-    });
+    if (window.OneSignal) {
+        OneSignal.Notifications.requestPermission().then(accepted => {
+            if (accepted) {
+                updateStatus("✅ Permission granted! Getting ID...");
+                // Get the user ID after permission
+                setTimeout(() => {
+                    OneSignal.User.getPushSubscription().then(sub => {
+                        if (sub && sub.id) {
+                            updateStatus(`✅ Subscribed! ID: ${sub.id.substring(0, 20)}...`);
+                        }
+                    });
+                }, 1000);
+            } else {
+                updateStatus("❌ Permission denied");
+            }
+        });
+    } else {
+        updateStatus("❌ OneSignal not ready");
+    }
+}
+
+function removeTestPanel() {
+    document.getElementById('onesignalTestPanel').style.display = 'none';
+    updateStatus("Test panel removed (refresh to bring back)");
 }
 </script>
+<!-- ===== END ONESIGNAL TEST SECTION ===== -->
 </body>
 </html>
