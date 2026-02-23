@@ -2006,6 +2006,48 @@
                 else typingIndicator.classList.remove('show');
             });
         }
+        <!-- Add this button anywhere in your admin dashboard -->
+<div style="padding: 10px; background: #f0f0f0; margin: 10px; border-radius: 5px;">
+  <button onclick="testPipedream()" style="background: #95BF47; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+    🔔 Test Pipedream Connection
+  </button>
+  <span id="pipedreamStatus" style="margin-left: 10px; color: #666;"></span>
+</div>
+
+<script>
+function testPipedream() {
+  const statusEl = document.getElementById('pipedreamStatus');
+  statusEl.textContent = 'Sending...';
+  statusEl.style.color = '#666';
+  
+  const webhookUrl = 'https://eo990xxerzy11gn.m.pipedream.net';
+  
+  const testData = {
+    test: true,
+    message: "Hello from Shopify Admin!",
+    timestamp: Date.now(),
+    source: "admin_dashboard",
+    sessionId: currentSessionId || "no-session"
+  };
+  
+  fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(testData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    statusEl.textContent = '✅ Success! Check Pipedream';
+    statusEl.style.color = 'green';
+    console.log('Pipedream response:', data);
+  })
+  .catch(error => {
+    statusEl.textContent = '❌ Failed: ' + error.message;
+    statusEl.style.color = 'red';
+    console.error('Error:', error);
+  });
+}
+</script>
     </script>
 </body>
 </html>
