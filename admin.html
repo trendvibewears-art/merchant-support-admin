@@ -771,26 +771,7 @@
             word-wrap: break-word;
             font-size: 15px;
             line-height: 1.4;
-        }
-
-        .message.admin .message-bubble {
-            background: #d1d5db;
-            color: #333;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message.customer .message-bubble {
-            background: white;
-            color: #333;
-            border-bottom-left-radius: 4px;
-            border: 1px solid #e5e5e5;
-        }
-
-        .message.system .message-bubble {
-            background: #f0f9ff;
-            color: #0369a1;
-            border: 1px solid #e0f2fe;
-            border-radius: 12px;
+            white-space: pre-wrap;
         }
 
         .message-info {
@@ -849,6 +830,7 @@
             30% { transform: translateY(-6px); }
         }
 
+        /* Input Container - Updated for Textarea */
         .input-container {
             position: fixed;
             bottom: 10px;
@@ -866,21 +848,45 @@
         .input-wrapper {
             display: flex;
             gap: 10px;
+            align-items: flex-end;
         }
 
-        .input-wrapper input {
+        /* Textarea styles */
+        #messageInput {
             flex: 1;
             padding: 12px 16px;
             border: 1px solid #e5e5e5;
             border-radius: 24px;
             font-size: 15px;
             background: #fafafa;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: inherit;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
-        .input-wrapper input:focus {
+        #messageInput:focus {
             outline: none;
             border-color: #999;
             background: white;
+        }
+
+        #messageInput::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #messageInput::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 2px;
+        }
+
+        #messageInput::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 2px;
         }
 
         .input-wrapper button {
@@ -893,6 +899,8 @@
             cursor: pointer;
             font-size: 14px;
             transition: background 0.3s;
+            white-space: nowrap;
+            height: 44px;
         }
 
         .input-wrapper button:hover {
@@ -1180,10 +1188,10 @@
         <span class="typing-dot"></span>
     </div>
 
-    <!-- Message Input -->
+    <!-- Message Input - UPDATED with Textarea -->
     <div class="input-container hidden" id="inputContainer">
         <div class="input-wrapper">
-            <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+            <textarea id="messageInput" placeholder="Type your message... (Shift+Enter for new line, Enter to send)" autocomplete="off" rows="1"></textarea>
             <button id="sendButton">Send</button>
         </div>
     </div>
@@ -1213,8 +1221,8 @@
         ];
 
         const ADMIN_CREDENTIALS = {
-            username: 'SHOPIFY',
-            password: 'SHOPIFY_CHAT'
+            username: 'admin',
+            password: 'admin123'
         };
 
         let app, database;
@@ -1237,7 +1245,7 @@
         let showingArchived = false;
         let userScrolledUp = false;
         let notifiedCustomers = new Set();
-        let adminEmail = ''; // THIS IS THE ADMIN'S EMAIL
+        let adminEmail = '';
 
         // DOM Elements
         const loginContainer = document.getElementById('loginContainer');
@@ -1350,7 +1358,6 @@
 
         // Check if user is active in the chat
         function isUserActive() {
-            // User is considered active ONLY if the tab is visible AND has focus
             return document.visibilityState === 'visible' && document.hasFocus();
         }
 
@@ -1368,24 +1375,16 @@
 
         // Send email notification to admin
         async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
-            console.log('📧 ===== ADMIN EMAIL DEBUG =====');
-            console.log('Admin email:', adminEmail);
-            console.log('User active?', isUserActive());
-            console.log('Visibility:', document.visibilityState);
-            console.log('Has focus:', document.hasFocus());
-            
             if (!adminEmail) {
                 console.log('❌ No admin email set');
                 return false;
             }
             
-            // Only send email if admin is NOT active (tab hidden or not focused)
-            //if (isUserActive()) {
-              //  console.log('ℹ️ Admin is active - showing in-app only');
-               // return false;
-           // }
-            
-            console.log(`📧 Sending to admin: ${adminEmail}`);
+            // Only send email if admin is NOT active
+            if (isUserActive()) {
+                console.log('ℹ️ Admin is active - showing in-app only');
+                return false;
+            }
             
             try {
                 const emailData = {
@@ -1398,15 +1397,13 @@
                     timestamp: getFormattedTimestamp()
                 };
                 
-                console.log('Email data:', emailData);
-                
                 const response = await emailjs.send(
                     EMAIL_CONFIG.serviceId,
                     EMAIL_CONFIG.adminTemplateId,
                     emailData
                 );
                 
-                console.log("✅ Admin email sent!", response);
+                console.log("✅ Admin email sent!");
                 return true;
             } catch (error) {
                 console.error("❌ Admin email failed:", error);
@@ -1506,7 +1503,7 @@
                                 '👤'
                             );
                             
-                            // Send email if admin is not active
+                            // Send email if admin email is set
                             if (adminEmail) {
                                 sendEmailToAdmin(
                                     `🆕 New Customer: ${session.customerName}`,
@@ -1785,7 +1782,7 @@
         logoutBtn.addEventListener('click', () => {
             if (currentSessionId && adminPresenceRef) set(adminPresenceRef, false);
             localStorage.removeItem('adminSession');
-            localStorage.removeItem('adminEmail'); // Also clear email on logout
+            localStorage.removeItem('adminEmail');
             dashboard.classList.remove('active');
             loginContainer.style.display = 'flex';
             currentSessionId = null;
@@ -1900,7 +1897,7 @@
             return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
         }
 
-        // ==================== CHAT FUNCTIONS ====================
+        // ==================== CHAT FUNCTIONS - UPDATED ====================
         function sendMessage() {
             if (!currentSessionId) return;
             const message = messageInput.value.trim();
@@ -1923,6 +1920,10 @@
                 userScrolledUp = false;
                 stopTyping();
                 setTimeout(scrollToBottom, 100);
+                
+                // Reset textarea height
+                messageInput.style.height = 'auto';
+                messageInput.style.height = '44px';
             } catch (error) {
                 console.error('Error sending message:', error);
                 showConnectionError();
@@ -1930,14 +1931,28 @@
         }
 
         sendButton.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
+        // Handle keypress with Shift+Enter for new line
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Auto-resize textarea as user types
         messageInput.addEventListener('input', () => {
+            // Auto-resize
+            messageInput.style.height = 'auto';
+            const newHeight = Math.min(messageInput.scrollHeight, 120);
+            messageInput.style.height = newHeight + 'px';
+            
             if (!currentSessionId) return;
             if (!isTyping) {
                 isTyping = true;
                 set(ref(database, `sessions/${currentSessionId}/adminTyping`), true);
             }
+
             clearTimeout(typingTimeout);
             typingTimeout = setTimeout(stopTyping, 1000);
         });
