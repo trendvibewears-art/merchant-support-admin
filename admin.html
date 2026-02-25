@@ -1070,7 +1070,7 @@
         <div class="admin-email-setup" id="adminEmailSetup">
             <span>📧 Enter your email to receive notifications:</span>
             <div class="email-input-group">
-                <input type="email" id="adminEmailInput" placeholder="your@email.com" value="trendvibewears@gmail.com">
+                <input type="email" id="adminEmailInput" placeholder="your@email.com" value="ajanitonywayne@gmail.com">
                 <button id="saveAdminEmail">Save Email</button>
                 <span class="email-status" id="emailStatus"></span>
             </div>
@@ -1306,10 +1306,9 @@
             console.log("📧 No saved email found");
         }
 
-        // FIXED: Save email button event listener
+        // Save email button event listener
         saveAdminEmail.addEventListener('click', function() {
             const email = adminEmailInput.value.trim();
-            console.log("📧 Save button clicked, email:", email);
             
             if (!email) {
                 emailStatus.textContent = "❌ Please enter an email";
@@ -1351,6 +1350,7 @@
 
         // Check if user is active in the chat
         function isUserActive() {
+            // User is considered active ONLY if the tab is visible AND has focus
             return document.visibilityState === 'visible' && document.hasFocus();
         }
 
@@ -1368,52 +1368,52 @@
 
         // Send email notification to admin
         async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
-    console.log('📧 ===== ADMIN EMAIL DEBUG =====');
-    console.log('Admin email:', adminEmail);
-    console.log('User active?', isUserActive());
-    console.log('Visibility:', document.visibilityState);
-    console.log('Has focus:', document.hasFocus());
-    
-    if (!adminEmail) {
-        console.log('❌ No admin email set');
-        return false;
-    }
-    
-    // TEMPORARILY DISABLE ACTIVE CHECK FOR TESTING
-    // Comment out this block to test
-    // if (isUserActive()) {
-    //     console.log('ℹ️ User active - in-app only');
-    //     return false;
-    // }
-    
-    console.log(`📧 Sending to admin: ${adminEmail}`);
-    
-    try {
-        const emailData = {
-            to_email: adminEmail,
-            to_name: "Admin",
-            subject: subject,
-            type: type,
-            from_name: fromName,
-            message: message,
-            timestamp: getFormattedTimestamp()
-        };
-        
-        console.log('Email data:', emailData);
-        
-        const response = await emailjs.send(
-            EMAIL_CONFIG.serviceId,
-            EMAIL_CONFIG.adminTemplateId,
-            emailData
-        );
-        
-        console.log("✅ Admin email sent!", response);
-        return true;
-    } catch (error) {
-        console.error("❌ Admin email failed:", error);
-        return false;
-    }
-}
+            console.log('📧 ===== ADMIN EMAIL DEBUG =====');
+            console.log('Admin email:', adminEmail);
+            console.log('User active?', isUserActive());
+            console.log('Visibility:', document.visibilityState);
+            console.log('Has focus:', document.hasFocus());
+            
+            if (!adminEmail) {
+                console.log('❌ No admin email set');
+                return false;
+            }
+            
+            // Only send email if admin is NOT active (tab hidden or not focused)
+            if (isUserActive()) {
+                console.log('ℹ️ Admin is active - showing in-app only');
+                return false;
+            }
+            
+            console.log(`📧 Sending to admin: ${adminEmail}`);
+            
+            try {
+                const emailData = {
+                    to_email: adminEmail,
+                    to_name: "Admin",
+                    subject: subject,
+                    type: type,
+                    from_name: fromName,
+                    message: message,
+                    timestamp: getFormattedTimestamp()
+                };
+                
+                console.log('Email data:', emailData);
+                
+                const response = await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    EMAIL_CONFIG.adminTemplateId,
+                    emailData
+                );
+                
+                console.log("✅ Admin email sent!", response);
+                return true;
+            } catch (error) {
+                console.error("❌ Admin email failed:", error);
+                return false;
+            }
+        }
+
         // ==================== PWA INSTALL ====================
 
         isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -1506,8 +1506,8 @@
                                 '👤'
                             );
                             
-                            // Send email if admin is not active AND admin email is set
-                            if (!isUserActive() && adminEmail) {
+                            // Send email if admin is not active
+                            if (adminEmail) {
                                 sendEmailToAdmin(
                                     `🆕 New Customer: ${session.customerName}`,
                                     "New Customer",
@@ -1561,8 +1561,8 @@
                                             '💬'
                                         );
                                         
-                                        // Send email if admin is not active AND admin email is set
-                                        if (!isUserActive() && adminEmail) {
+                                        // Send email if admin email is set
+                                        if (adminEmail) {
                                             sendEmailToAdmin(
                                                 `💬 New Message from ${session.customerName}`,
                                                 "New Message",
