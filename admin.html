@@ -724,28 +724,18 @@
             flex-direction: row-reverse;
         }
 
-        .message-initials {
+        .message-avatar {
             width: 32px;
             height: 32px;
             border-radius: 50%;
+            background: #e5e5e5;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 12px;
             font-weight: 600;
+            color: #666;
             flex-shrink: 0;
-        }
-
-        .message.admin .message-initials {
-            background: #e8f5e9;
-            color: #2e7d32;
-            border: 2px solid #c8e6c9;
-        }
-
-        .message.customer .message-initials {
-            background: #e3f2fd;
-            color: #0d47a1;
-            border: 2px solid #bbdefb;
         }
 
         .message-content {
@@ -758,13 +748,6 @@
             align-items: flex-end;
         }
 
-        .agent-name {
-            font-size: 11px;
-            font-weight: 600;
-            color: #2e7d32;
-            margin-bottom: 2px;
-        }
-
         .message-bubble {
             padding: 10px 14px;
             border-radius: 16px;
@@ -772,6 +755,26 @@
             font-size: 15px;
             line-height: 1.4;
             white-space: pre-wrap;
+        }
+
+        .message.admin .message-bubble {
+            background: #d1d5db;
+            color: #333;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.customer .message-bubble {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #e5e5e5;
+        }
+
+        .message.system .message-bubble {
+            background: #f0f9ff;
+            color: #0369a1;
+            border: 1px solid #e0f2fe;
+            border-radius: 12px;
         }
 
         .message-info {
@@ -830,7 +833,7 @@
             30% { transform: translateY(-6px); }
         }
 
-        /* Input Container - Updated for Textarea */
+        /* Input Container */
         .input-container {
             position: fixed;
             bottom: 10px;
@@ -848,10 +851,8 @@
         .input-wrapper {
             display: flex;
             gap: 10px;
-            align-items: flex-end;
         }
 
-        /* Textarea styles */
         #messageInput {
             flex: 1;
             padding: 12px 16px;
@@ -859,34 +860,12 @@
             border-radius: 24px;
             font-size: 15px;
             background: #fafafa;
-            resize: none;
-            min-height: 44px;
-            max-height: 120px;
-            overflow-y: auto;
-            font-family: inherit;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-wrap: break-word;
         }
 
         #messageInput:focus {
             outline: none;
             border-color: #999;
             background: white;
-        }
-
-        #messageInput::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        #messageInput::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 2px;
-        }
-
-        #messageInput::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 2px;
         }
 
         .input-wrapper button {
@@ -900,7 +879,6 @@
             font-size: 14px;
             transition: background 0.3s;
             white-space: nowrap;
-            height: 44px;
         }
 
         .input-wrapper button:hover {
@@ -1188,10 +1166,10 @@
         <span class="typing-dot"></span>
     </div>
 
-    <!-- Message Input - UPDATED with Textarea -->
+    <!-- Message Input - SIMPLE VERSION -->
     <div class="input-container hidden" id="inputContainer">
         <div class="input-wrapper">
-            <textarea id="messageInput" placeholder="Type your message... (Shift+Enter for new line, Enter to send)" autocomplete="off" rows="1"></textarea>
+            <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
             <button id="sendButton">Send</button>
         </div>
     </div>
@@ -1682,15 +1660,17 @@
             if (assignedAgent) {
                 assignedAgentDisplay.innerHTML = `<div style="display: flex; align-items: center; gap: 6px;"><div style="width: 24px; height: 24px; border-radius: 50%; background: #e8f5e9; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #2e7d32;">${assignedAgent.initials}</div><span>${assignedAgent.name}</span></div>`;
             }
-            set(ref(database, `sessions/${sessionId}`), { 
-                ...session,
-                unreadByAdmin: 0, 
-                newCustomer: false 
-            });
+            
+            // Mark as read
+            set(ref(database, `sessions/${sessionId}/unreadByAdmin`), 0);
+            set(ref(database, `sessions/${sessionId}/newCustomer`), false);
+            
+            // Set admin online
             if (adminPresenceRef) set(adminPresenceRef, false);
             adminPresenceRef = ref(database, `sessions/${sessionId}/adminOnline`);
             set(adminPresenceRef, true);
             onDisconnect(adminPresenceRef).set(false);
+            
             listenForMessages(sessionId);
             listenForCustomerTyping(sessionId);
             messageInput.focus();
@@ -1897,7 +1877,7 @@
             return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
         }
 
-        // ==================== CHAT FUNCTIONS - UPDATED ====================
+        // ==================== CHAT FUNCTIONS ====================
         function sendMessage() {
             if (!currentSessionId) return;
             const message = messageInput.value.trim();
@@ -1920,10 +1900,6 @@
                 userScrolledUp = false;
                 stopTyping();
                 setTimeout(scrollToBottom, 100);
-                
-                // Reset textarea height
-                messageInput.style.height = 'auto';
-                messageInput.style.height = '44px';
             } catch (error) {
                 console.error('Error sending message:', error);
                 showConnectionError();
@@ -1931,22 +1907,10 @@
         }
 
         sendButton.addEventListener('click', sendMessage);
+        
+        // REMOVED: Enter key sending - now only button works
 
-        // Handle keypress with Shift+Enter for new line
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // Auto-resize textarea as user types
         messageInput.addEventListener('input', () => {
-            // Auto-resize
-            messageInput.style.height = 'auto';
-            const newHeight = Math.min(messageInput.scrollHeight, 120);
-            messageInput.style.height = newHeight + 'px';
-            
             if (!currentSessionId) return;
             if (!isTyping) {
                 isTyping = true;
@@ -1991,30 +1955,33 @@
         function displayMessage(msg, id) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${msg.sender}`;
-            const initialsDiv = document.createElement('div');
-            initialsDiv.className = 'message-initials';
-            if (msg.sender === 'admin') initialsDiv.textContent = msg.senderInitials || 'SP';
-            else initialsDiv.textContent = currentCustomerInitials || 'CU';
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = msg.sender === 'admin' ? 'SS' : currentCustomerInitials;
+            
             const content = document.createElement('div');
             content.className = 'message-content';
-            if (msg.sender === 'admin' && msg.senderName) {
-                const nameDiv = document.createElement('div');
-                nameDiv.className = 'agent-name';
-                nameDiv.textContent = msg.senderName;
-                content.appendChild(nameDiv);
-            }
+            
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
             bubble.textContent = msg.text;
+            
             const info = document.createElement('div');
             info.className = 'message-info';
+            
             const time = msg.timestamp ? formatTime(msg.timestamp) : 'now';
             const receipt = msg.read ? '✓✓' : '✓';
-            if (msg.sender === 'admin') info.innerHTML = `<span>${time}</span><span>${receipt}</span>`;
-            else info.innerHTML = `<span>${time}</span>`;
+            
+            if (msg.sender === 'admin') {
+                info.innerHTML = `<span>${time}</span><span>${receipt}</span>`;
+            } else {
+                info.innerHTML = `<span>${time}</span>`;
+            }
+            
             content.appendChild(bubble);
             content.appendChild(info);
-            messageDiv.appendChild(initialsDiv);
+            messageDiv.appendChild(avatar);
             messageDiv.appendChild(content);
             messagesContainer.appendChild(messageDiv);
         }
