@@ -15,8 +15,8 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5968/5968705.png">
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/5968/5968705.png">
     
-    <!-- OneSignal Web Push SDK -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     
     <style>
         * {
@@ -140,32 +140,6 @@
             padding: 6px 16px;
             border-radius: 20px;
             font-weight: 600;
-            cursor: pointer;
-        }
-
-        /* Notification Permission Banner */
-        .notification-banner {
-            background: #fef3c7;
-            color: #92400e;
-            padding: 12px 20px;
-            font-size: 13px;
-            display: none;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #fde68a;
-        }
-
-        .notification-banner.show {
-            display: flex;
-        }
-
-        .notification-banner button {
-            padding: 6px 16px;
-            background: #92400e;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 12px;
             cursor: pointer;
         }
 
@@ -1029,12 +1003,6 @@
             <button id="installBtn">Install</button>
         </div>
 
-        <!-- Notification Permission Banner -->
-        <div class="notification-banner" id="notificationBanner">
-            <span>🔔 Enable notifications for real-time alerts</span>
-            <button id="enableNotificationsBtn">Enable</button>
-        </div>
-
         <!-- Dropdown Notification Banner -->
         <div class="dropdown-notification" id="dropdownNotification">
             <div class="dropdown-notification-icon">🔔</div>
@@ -1140,28 +1108,9 @@
         </div>
     </div>
 
-    <!-- OneSignal Test Panel (Remove after testing) -->
-    <div style="position: fixed; bottom: 20px; right: 20px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10000; border: 2px solid #95BF47;" id="onesignalTestPanel">
-        <h4 style="margin: 0 0 10px 0; color: #333;">🔔 OneSignal Test</h4>
-        <button onclick="testOneSignal()" style="background: #95BF47; color: white; border: none; padding: 8px 16px; border-radius: 5px; margin-right: 5px; cursor: pointer;">
-            Test Status
-        </button>
-        <button onclick="requestOneSignal()" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 5px; margin-right: 5px; cursor: pointer;">
-            Allow
-        </button>
-        <button onclick="removeTestPanel()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-            📱 Check Mobile
-    </button>
-    <button onclick="removeTestPanel()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-            Remove
-        </button>
-        <div id="onesignalStatus" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
-    </div>
-
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
         import { getDatabase, ref, push, onValue, set, update, serverTimestamp, onDisconnect, get, remove } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
-        import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyA2E8L9VDUWXyJ1UgqlvTFpqYvRVNDUfho",
@@ -1184,18 +1133,17 @@
         ];
 
         const ADMIN_CREDENTIALS = {
-            username: 'FATISCO',
-            password: 'FATISCO8'
+            username: 'admin',
+            password: 'admin123'
         };
 
-        let app, database, messaging;
+        let app, database;
         let deferredPrompt = null;
         let isPWA = false;
         
         try {
             app = initializeApp(firebaseConfig);
             database = getDatabase(app);
-            messaging = getMessaging(app);
         } catch (error) {
             console.error('Firebase initialization error:', error);
         }
@@ -1228,8 +1176,6 @@
         const inputContainer = document.getElementById('inputContainer');
         const activeTab = document.getElementById('activeTab');
         const archivedTab = document.getElementById('archivedTab');
-        const notificationBanner = document.getElementById('notificationBanner');
-        const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
         const endChatBtn = document.getElementById('endChatBtn');
         const adminInitials = document.getElementById('adminInitials');
         const adminNameDisplay = document.getElementById('adminNameDisplay');
@@ -1245,165 +1191,57 @@
 
         let notificationTimeout = null;
 
-        // VAPID Key from Firebase Console
-        const VAPID_KEY = 'BPvPqihZJEnsUnQdnnVUIJ_szit7qXHFKfjEyogKX44rvUICKwrctxN2X7LYf3Ro1PuTvJ_n5vS98j9dTKm-v6k';
+        // ==================== EMAILJS CONFIGURATION ====================
+        const EMAIL_CONFIG = {
+            serviceId: "service_tgqvv15",
+            adminTemplateId: "template_e9vgdz8",
+            adminEmail: "trendvibewears@gmail.com" // Your email for admin notifications
+        };
 
-        // ==================== ONESIGNAL CONFIGURATION ====================
-        const ONESIGNAL_APP_ID = "13ffdfa8-cb41-45d2-bd9b-d43664c12392";
-        const ONESIGNAL_API_KEY = "os_v2_app_cp757kglifc5fpm32q3gjqjdskfhscctdrwexyunyfjmis22vzdw3jngpmue33pawk6q467iys6jm3wwbbi6sojabaap7flzch4yxga";
+        // Initialize EmailJS
+        (function() {
+            emailjs.init("xvNOeNBbWUGNwnwE1");
+            console.log("✅ EmailJS initialized");
+        })();
 
-        // Initialize OneSignal
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        window.OneSignalDeferred.push(async function(OneSignal) {
-            await OneSignal.init({
-                appId: ONESIGNAL_APP_ID,
-                safari_web_id: "",
-                notifyButton: {
-                    enable: false,
-                },
-                allowLocalhostAsSecureOrigin: true,
+        // Check if user is active in the chat
+        function isUserActive() {
+            return document.visibilityState === 'visible' && document.hasFocus();
+        }
+
+        // Send email notification
+        async function sendEmailNotification(recipientEmail, templateId, templateParams) {
+            console.log(`📧 Sending email via template: ${templateId}`);
+            
+            try {
+                const response = await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    templateId,
+                    {
+                        to_email: recipientEmail,
+                        ...templateParams
+                    }
+                );
+                
+                console.log("✅ Email sent successfully:", response.status);
+                return true;
+            } catch (error) {
+                console.error("❌ Email failed to send:", error);
+                return false;
+            }
+        }
+
+        // Format timestamp
+        function getFormattedTimestamp() {
+            const now = new Date();
+            return now.toLocaleString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit'
             });
-            console.log("✅ OneSignal initialized");
-            
-            // Tag as admin
-            OneSignal.User.addTag("role", "admin");
-            console.log("✅ Tagged as admin");
-        });
-
-        // OneSignal notification functions
-        async function notifyAdmin(title, message, sessionId = null) {
-            console.log("📱 Notifying admin:", title);
-            
-            try {
-                const response = await fetch('https://onesignal.com/api/v1/notifications', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Basic ${ONESIGNAL_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        app_id: ONESIGNAL_APP_ID,
-                        filters: [
-                            { field: "tag", key: "role", relation: "=", value: "admin" }
-                        ],
-                        headings: { en: title },
-                        contents: { en: message },
-                        data: { 
-                            sessionId: sessionId || "",
-                            type: "admin_notification"
-                        },
-                        web_url: "https://merchant-support-admin.pages.dev",
-                        web_buttons: [
-                            { id: "open", text: "Open Chat", icon: "https://cdn-icons-png.flaticon.com/512/5968/5968705.png" }
-                        ]
-                    })
-                });
-                
-                const result = await response.json();
-                console.log("✅ Admin notification sent:", result);
-                return result;
-            } catch (error) {
-                console.error("❌ Failed to notify admin:", error);
-            }
         }
-
-        async function notifyCustomer(sessionId, title, message, agentName = "Support") {
-            console.log("📱 Notifying customer for session:", sessionId);
-            
-            if (!sessionId) {
-                console.error("❌ No sessionId provided");
-                return;
-            }
-            
-            try {
-                const response = await fetch('https://onesignal.com/api/v1/notifications', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Basic ${ONESIGNAL_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        app_id: ONESIGNAL_APP_ID,
-                        filters: [
-                            { field: "tag", key: "sessionId", relation: "=", value: sessionId }
-                        ],
-                        headings: { en: title },
-                        contents: { en: message },
-                        data: { 
-                            sessionId: sessionId,
-                            agent: agentName,
-                            type: "customer_notification"
-                        },
-                        web_url: "https://merchant-support-chat.pages.dev",
-                        web_buttons: [
-                            { id: "open", text: "Open Chat", icon: "https://i.postimg.cc/tRd0SC3Q/Shopify-Image.png" }
-                        ]
-                    })
-                });
-                
-                const result = await response.json();
-                console.log("✅ Customer notification sent:", result);
-                return result;
-            } catch (error) {
-                console.error("❌ Failed to notify customer:", error);
-            }
-        }
-
-        // Test functions
-        window.testOneSignal = function() {
-            const statusEl = document.getElementById('onesignalStatus');
-            if (!statusEl) return;
-            
-            statusEl.innerHTML = "Checking OneSignal...";
-            
-            if (window.OneSignal) {
-                window.OneSignal.User.getPushSubscription().then(sub => {
-                    if (sub && sub.id) {
-                        statusEl.innerHTML = `✅ Subscribed!<br>User ID: ${sub.id.substring(0, 20)}...`;
-                        console.log("OneSignal User ID:", sub.id);
-                    } else {
-                        statusEl.innerHTML = "❌ Not subscribed yet. Click 'Allow'";
-                    }
-                }).catch(err => {
-                    statusEl.innerHTML = "❌ Error: " + err.message;
-                });
-            } else {
-                statusEl.innerHTML = "❌ OneSignal not loaded";
-            }
-        };
-
-        window.requestOneSignal = function() {
-            const statusEl = document.getElementById('onesignalStatus');
-            if (!statusEl) return;
-            
-            statusEl.innerHTML = "Requesting permission...";
-            
-            if (window.OneSignal) {
-                window.OneSignal.Notifications.requestPermission().then(accepted => {
-                    if (accepted) {
-                        statusEl.innerHTML = "✅ Permission granted! Getting ID...";
-                        setTimeout(() => {
-                            window.OneSignal.User.getPushSubscription().then(sub => {
-                                if (sub && sub.id) {
-                                    statusEl.innerHTML = `✅ Subscribed! ID: ${sub.id.substring(0, 20)}...`;
-                                }
-                            });
-                        }, 1000);
-                    } else {
-                        statusEl.innerHTML = "❌ Permission denied";
-                    }
-                });
-            } else {
-                statusEl.innerHTML = "❌ OneSignal not ready";
-            }
-        };
-
-        window.removeTestPanel = function() {
-            const panel = document.getElementById('onesignalTestPanel');
-            if (panel) {
-                panel.style.display = 'none';
-            }
-        };
 
         // ==================== PWA INSTALL ====================
 
@@ -1433,90 +1271,9 @@
             deferredPrompt = null;
         });
 
-        // ==================== PUSH SUPPORT CHECKER ====================
-        function checkPushSupport() {
-            console.log('=== Push Support Check ===');
-            console.log('PushManager:', 'PushManager' in window ? '✅ Supported' : '❌ Not supported');
-            console.log('ServiceWorker:', 'serviceWorker' in navigator ? '✅ Supported' : '❌ Not supported');
-            console.log('Notification:', 'Notification' in window ? '✅ Supported' : '❌ Not supported');
-            console.log('Permissions API:', navigator.permissions ? '✅ Supported' : '❌ Not supported');
-            
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then(registrations => {
-                    console.log(`Active service workers: ${registrations.length}`);
-                });
-            }
-            
-            return true;
-        }
+        // ==================== NOTIFICATION FUNCTIONS ====================
 
-        // ==================== FIXED SERVICE WORKER REGISTRATION ====================
-        async function registerFCMServiceWorker() {
-            if ('serviceWorker' in navigator) {
-                try {
-                    const registrations = await navigator.serviceWorker.getRegistrations();
-                    console.log(`Found ${registrations.length} existing service workers`);
-                    
-                    // Register new service worker
-                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-                        scope: '/',
-                        updateViaCache: 'none'
-                    });
-                    console.log('✅ Service Worker registered:', registration);
-                    
-                    await navigator.serviceWorker.ready;
-                    console.log('Service Worker is ready');
-                    
-                    if (registration.active) {
-                        console.log('Service Worker is active');
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        
-                        if (Notification.permission === 'granted') {
-                            await getFCMToken();
-                        } else if (Notification.permission === 'default') {
-                            notificationBanner.classList.add('show');
-                        }
-                    }
-                    
-                } catch (error) {
-                    console.error('Service Worker registration failed:', error);
-                }
-            }
-        }
-
-        async function getFCMToken() {
-            try {
-                console.log('Attempting to get FCM token...');
-                const registration = await navigator.serviceWorker.ready;
-                
-                if (!registration || !registration.active) {
-                    console.log('Service worker not active, retrying...');
-                    setTimeout(getFCMToken, 2000);
-                    return;
-                }
-
-                const token = await getToken(messaging, {
-                    vapidKey: VAPID_KEY
-                });
-                
-                if (token) {
-                    console.log('✅ FCM Token obtained successfully:', token);
-                    return token;
-                }
-            } catch (error) {
-                console.error('Error getting FCM token:', error);
-            }
-        }
-
-        onMessage(messaging, (payload) => {
-            console.log('Foreground message received:', payload);
-            const title = payload.notification?.title || 'Shopify Support';
-            const body = payload.notification?.body || 'New notification';
-            showShopifyNotification(title, body);
-            playWhatsAppSound();
-        });
-
-        function showShopifyNotification(title, message, icon = '🔔') {
+        function showInAppNotification(title, message, icon = '🔔') {
             if (notificationTimeout) clearTimeout(notificationTimeout);
             
             notifTitle.textContent = title;
@@ -1528,52 +1285,28 @@
                 dropdownNotification.classList.remove('show');
             }, 5000);
             
-            playWhatsAppSound();
+            playNotificationSound();
         }
 
-        function playWhatsAppSound() {
+        function playNotificationSound() {
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator1 = audioContext.createOscillator();
-                const gainNode1 = audioContext.createGain();
-                oscillator1.connect(gainNode1);
-                gainNode1.connect(audioContext.destination);
-                oscillator1.frequency.value = 900;
-                oscillator1.type = 'sine';
-                gainNode1.gain.setValueAtTime(0.5, audioContext.currentTime);
-                gainNode1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-                oscillator1.start(audioContext.currentTime);
-                oscillator1.stop(audioContext.currentTime + 0.2);
-                
-                const oscillator2 = audioContext.createOscillator();
-                const gainNode2 = audioContext.createGain();
-                oscillator2.connect(gainNode2);
-                gainNode2.connect(audioContext.destination);
-                oscillator2.frequency.value = 600;
-                oscillator2.type = 'sine';
-                gainNode2.gain.setValueAtTime(0.5, audioContext.currentTime + 0.15);
-                gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-                oscillator2.start(audioContext.currentTime + 0.15);
-                oscillator2.stop(audioContext.currentTime + 0.4);
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
             } catch (error) {
                 console.log('Audio error:', error);
             }
         }
 
-        enableNotificationsBtn.addEventListener('click', async () => {
-            try {
-                const permission = await Notification.requestPermission();
-                if (permission === 'granted') {
-                    notificationBanner.classList.remove('show');
-                    await getFCMToken();
-                    showShopifyNotification('✅ Notifications Enabled', 'You will receive alerts for new customers and messages');
-                }
-            } catch (error) {
-                console.error('Error requesting permission:', error);
-            }
-        });
-
-        // ==================== FIXED NOTIFICATION LISTENER ====================
+        // ==================== NOTIFICATION LISTENER ====================
         function setupNotificationListener() {
             const sessionsRef = ref(database, 'sessions');
             let processingNotifications = false;
@@ -1595,14 +1328,27 @@
                             const agent = AGENT_PERSONAS.find(a => a.id === session.assignedAgent);
                             const agentName = agent ? agent.name : 'Support';
                             
-                            // Send OneSignal notification
-                            notifyAdmin('🆕 New Customer', `${session.customerName} joined - Assigned to ${agentName}`, id);
-                            
-                            showShopifyNotification(
+                            // Show in-app notification
+                            showInAppNotification(
                                 '🆕 New Customer', 
                                 `${session.customerName} joined - Assigned to ${agentName}`,
                                 '👤'
                             );
+                            
+                            // Send email if admin is not active
+                            if (!isUserActive()) {
+                                sendEmailNotification(
+                                    EMAIL_CONFIG.adminEmail,
+                                    EMAIL_CONFIG.adminTemplateId,
+                                    {
+                                        subject: `🆕 New Customer: ${session.customerName}`,
+                                        type: "New Customer",
+                                        from_name: session.customerName,
+                                        message: `${session.customerName} (${session.customerEmail}) just joined and is waiting for assistance.`,
+                                        timestamp: getFormattedTimestamp()
+                                    }
+                                );
+                            }
                         }
                     });
                 } finally {
@@ -1641,14 +1387,27 @@
                                             ? lastMsg.text.substring(0, 60) + '...' 
                                             : lastMsg.text;
                                         
-                                        // Send OneSignal notification
-                                        notifyAdmin('💬 New Message', `${session.customerName}: ${messagePreview}`, sessionId);
-                                        
-                                        showShopifyNotification(
+                                        // Show in-app notification
+                                        showInAppNotification(
                                             `💬 ${session.customerName}`,
                                             messagePreview,
                                             '💬'
                                         );
+                                        
+                                        // Send email if admin is not active
+                                        if (!isUserActive()) {
+                                            sendEmailNotification(
+                                                EMAIL_CONFIG.adminEmail,
+                                                EMAIL_CONFIG.adminTemplateId,
+                                                {
+                                                    subject: `💬 New Message from ${session.customerName}`,
+                                                    type: "New Message",
+                                                    from_name: session.customerName,
+                                                    message: lastMsg.text,
+                                                    timestamp: getFormattedTimestamp()
+                                                }
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -1679,7 +1438,7 @@
             agentStats.innerHTML = statsHtml;
         }
 
-        // ==================== FIXED ARCHIVE/UNARCHIVE/DELETE FUNCTIONS ====================
+        // ==================== ARCHIVE/UNARCHIVE/DELETE FUNCTIONS ====================
         function archiveSession(sessionId) {
             if (confirm('Archive this chat? It will be moved to the Archived tab.')) {
                 get(ref(database, `sessions/${sessionId}`)).then((snapshot) => {
@@ -1728,7 +1487,7 @@
                 remove(ref(database, `sessions/${sessionId}`))
                     .then(() => {
                         console.log('Session deleted successfully:', sessionId);
-                        showShopifyNotification('✅ Deleted', `Chat with ${customerName} removed`, '🗑️');
+                        showInAppNotification('✅ Deleted', `Chat with ${customerName} removed`, '🗑️');
                         
                         if (currentSessionId === sessionId) {
                             goToInbox();
@@ -1788,10 +1547,6 @@
         window.addEventListener('load', async () => {
             isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
             
-            checkPushSupport();
-            
-            await registerFCMServiceWorker();
-            
             const savedAdmin = localStorage.getItem('adminSession');
             if (savedAdmin) {
                 try {
@@ -1837,7 +1592,7 @@
                 try {
                     const messageRef = push(ref(database, `sessions/${currentSessionId}/messages`));
                     set(messageRef, { text: 'Chat session ended by support team.', type: 'notification', timestamp: serverTimestamp() });
-                    showShopifyNotification('Chat Ended', 'Chat has been ended', '✅');
+                    showInAppNotification('Chat Ended', 'Chat has been ended', '✅');
                     setTimeout(scrollToBottom, 100);
                 } catch (error) {
                     console.error('Error ending chat:', error);
@@ -1846,7 +1601,7 @@
             }
         });
 
-        loginForm.addEventListener('submit', async (e) => {
+        loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -1857,9 +1612,6 @@
                 adminEmail.textContent = 'admin@support.com';
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
-                
-                await registerFCMServiceWorker();
-                
                 loadSessions();
                 setupNotificationListener();
                 goToInbox();
@@ -1891,7 +1643,7 @@
             loadSessions();
         });
 
-        // ==================== FIXED LOAD SESSIONS ====================
+        // ==================== LOAD SESSIONS ====================
         function loadSessions() {
             const sessionsRef = ref(database, 'sessions');
             let processingSessions = false;
@@ -2004,57 +1756,6 @@
                 });
                 
                 set(ref(database, `sessions/${currentSessionId}/lastActivity`), Date.now());
-
-                // Add this function to your existing script
-window.checkMobileOneSignal = function() {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    
-    let message = "📱 MOBILE DIAGNOSTIC\n\n";
-    message += `Mobile Device: ${isMobile ? '✅ Yes' : '❌ No'}\n`;
-    message += `PWA Installed: ${isStandalone ? '✅ Yes' : '❌ No'}\n`;
-    message += `iOS Device: ${isIOS ? '✅ Yes' : '❌ No'}\n\n`;
-    
-    if (window.OneSignal) {
-        window.OneSignal.User.getPushSubscription().then(sub => {
-            message += `OneSignal User ID: ${sub?.id ? '✅ ' + sub.id.substring(0, 15) + '...' : '❌ Not subscribed'}\n`;
-            message += `Subscribed: ${sub?.id ? 'Yes' : 'No'}\n\n`;
-            
-            if (!sub?.id && isMobile) {
-                message += "⚠️ NOT SUBSCRIBED ON MOBILE!\n";
-                if (isIOS && !isStandalone) {
-                    message += "\n📱 iOS REQUIREMENT:\n";
-                    message += "1. Tap Share button\n";
-                    message += "2. Add to Home Screen\n";
-                    message += "3. Open from home screen\n";
-                    message += "4. Allow notifications";
-                } else if (/Android/i.test(navigator.userAgent)) {
-                    message += "\n🤖 Android CHECK:\n";
-                    message += "1. Chrome settings → Notifications\n";
-                    message += "2. Site settings → Allow\n";
-                    message += "3. Battery optimization off";
-                }
-            } else if (sub?.id && isMobile && !isStandalone && isIOS) {
-                message += "\n⚠️ iOS: Add to Home Screen for background notifications!";
-            }
-            
-            alert(message);
-        });
-    } else {
-        alert("❌ OneSignal not loaded");
-    }
-};
-                
-                // Send OneSignal notification to customer
-                const assignedAgent = AGENT_PERSONAS.find(a => a.id === currentCustomerInitials);
-                const agentName = assignedAgent ? assignedAgent.name : 'Support Team';
-                notifyCustomer(
-                    currentSessionId,
-                    '📱 Shopify Support',
-                    `New reply from ${agentName}`,
-                    agentName
-                );
                 
                 messageInput.value = '';
                 userScrolledUp = false;
