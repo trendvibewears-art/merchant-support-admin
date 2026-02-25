@@ -19,6 +19,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     
     <style>
+        /* ALL YOUR EXISTING STYLES - KEEP THEM THE SAME */
         * {
             margin: 0;
             padding: 0;
@@ -116,6 +117,38 @@
             display: flex;
         }
 
+        /* Admin Email Setup Panel */
+        .admin-email-setup {
+            background: #fef3c7;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #fde68a;
+        }
+
+        .admin-email-setup.hidden {
+            display: none;
+        }
+
+        .admin-email-setup input {
+            padding: 8px 12px;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            width: 300px;
+            font-size: 14px;
+        }
+
+        .admin-email-setup button {
+            padding: 8px 16px;
+            background: #95BF47;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
         /* Install PWA Banner */
         .install-prompt {
             background: #666;
@@ -209,6 +242,12 @@
         .admin-role {
             color: #666;
             font-size: 12px;
+        }
+
+        .admin-email-badge {
+            font-size: 11px;
+            color: #95BF47;
+            margin-top: 2px;
         }
 
         /* Animated Logout Button */
@@ -416,7 +455,6 @@
             font-size: 15px;
         }
 
-        /* Agent Badge in Session List */
         .assigned-agent-badge {
             display: flex;
             align-items: center;
@@ -591,7 +629,6 @@
             font-size: 13px;
         }
 
-        /* Agent Display in Chat Header */
         .assigned-agent-display {
             display: flex;
             align-items: center;
@@ -694,7 +731,6 @@
             align-items: flex-end;
         }
 
-        /* Agent Name above message */
         .agent-name {
             font-size: 11px;
             font-weight: 600;
@@ -849,7 +885,6 @@
             display: none !important;
         }
 
-        /* Dropdown Notification Banner */
         .dropdown-notification {
             position: fixed;
             top: -100px;
@@ -902,7 +937,6 @@
             color: #666;
         }
 
-        /* Mobile Responsive */
         @media (max-width: 768px) {
             .sessions-panel {
                 width: 100%;
@@ -948,6 +982,10 @@
                 min-width: 280px;
                 padding: 14px 20px;
             }
+            
+            .admin-email-setup input {
+                width: 200px;
+            }
         }
 
         .connection-error {
@@ -963,7 +1001,6 @@
             display: block;
         }
 
-        /* iOS Safe Areas */
         @supports (padding: max(0px)) {
             .input-container {
                 padding-left: max(15px, env(safe-area-inset-left));
@@ -997,6 +1034,15 @@
     </div>
 
     <div class="dashboard" id="dashboard">
+        <!-- Admin Email Setup Panel (shown if no email saved) -->
+        <div class="admin-email-setup" id="adminEmailSetup">
+            <span>📧 Please enter your email to receive notifications:</span>
+            <div>
+                <input type="email" id="adminEmailInput" placeholder="your@email.com" value="trendvibewears@gmail.com">
+                <button id="saveAdminEmail">Save</button>
+            </div>
+        </div>
+
         <!-- Install PWA Banner -->
         <div class="install-prompt" id="installPrompt">
             <span>📱 Install Admin App for notifications</span>
@@ -1023,6 +1069,7 @@
                     <div class="admin-info">
                         <span class="admin-name" id="adminNameDisplay">Admin</span>
                         <span class="admin-role">Support Manager</span>
+                        <span class="admin-email-badge" id="adminEmailDisplay"></span>
                     </div>
                 </div>
                 
@@ -1045,7 +1092,7 @@
                 <div class="sessions-panel">
                     <div class="sessions-header">
                         <h2>📥 All Customer Chats</h2>
-                        <p id="adminEmail">admin@support.com</p>
+                        <p id="adminEmailPlaceholder"></p>
                         <!-- Agent Stats -->
                         <div class="agent-stats" id="agentStats"></div>
                     </div>
@@ -1157,6 +1204,7 @@
         let showingArchived = false;
         let userScrolledUp = false;
         let notifiedCustomers = new Set();
+        let adminEmail = ''; // THIS IS THE ADMIN'S EMAIL
 
         // DOM Elements
         const loginContainer = document.getElementById('loginContainer');
@@ -1179,7 +1227,8 @@
         const endChatBtn = document.getElementById('endChatBtn');
         const adminInitials = document.getElementById('adminInitials');
         const adminNameDisplay = document.getElementById('adminNameDisplay');
-        const adminEmail = document.getElementById('adminEmail');
+        const adminEmailPlaceholder = document.getElementById('adminEmailPlaceholder');
+        const adminEmailDisplay = document.getElementById('adminEmailDisplay');
         const agentStats = document.getElementById('agentStats');
         const assignedAgentDisplay = document.getElementById('assignedAgentDisplay');
         const customerNameSpan = document.getElementById('customerNameSpan');
@@ -1188,14 +1237,18 @@
         const dropdownNotification = document.getElementById('dropdownNotification');
         const notifTitle = document.getElementById('notifTitle');
         const notifMessage = document.getElementById('notifMessage');
+        
+        // Admin Email Setup Elements
+        const adminEmailSetup = document.getElementById('adminEmailSetup');
+        const adminEmailInput = document.getElementById('adminEmailInput');
+        const saveAdminEmail = document.getElementById('saveAdminEmail');
 
         let notificationTimeout = null;
 
         // ==================== EMAILJS CONFIGURATION ====================
         const EMAIL_CONFIG = {
             serviceId: "service_tgqvv15",
-            adminTemplateId: "template_e9vgdz8",
-            adminEmail: "trendvibewears@gmail.com" // Your email for admin notifications
+            adminTemplateId: "template_e9vgdz8"
         };
 
         // Initialize EmailJS
@@ -1204,22 +1257,60 @@
             console.log("✅ EmailJS initialized");
         })();
 
+        // ==================== ADMIN EMAIL SETUP ====================
+        
+        // Load saved admin email from localStorage
+        const savedAdminEmail = localStorage.getItem('adminEmail');
+        if (savedAdminEmail) {
+            adminEmail = savedAdminEmail;
+            adminEmailSetup.classList.add('hidden');
+            adminEmailDisplay.textContent = `📧 ${adminEmail}`;
+            adminEmailPlaceholder.textContent = `Admin: ${adminEmail}`;
+        } else {
+            adminEmailSetup.classList.remove('hidden');
+        }
+
+        saveAdminEmail.addEventListener('click', () => {
+            const email = adminEmailInput.value.trim();
+            if (email && email.includes('@')) {
+                adminEmail = email;
+                localStorage.setItem('adminEmail', email);
+                adminEmailSetup.classList.add('hidden');
+                adminEmailDisplay.textContent = `📧 ${email}`;
+                adminEmailPlaceholder.textContent = `Admin: ${email}`;
+                
+                // Show success notification
+                showInAppNotification('✅ Email Saved', `Notifications will be sent to ${email}`);
+            } else {
+                alert('Please enter a valid email address');
+            }
+        });
+
         // Check if user is active in the chat
         function isUserActive() {
             return document.visibilityState === 'visible' && document.hasFocus();
         }
 
-        // Send email notification
-        async function sendEmailNotification(recipientEmail, templateId, templateParams) {
-            console.log(`📧 Sending email via template: ${templateId}`);
+        // Send email notification to admin
+        async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
+            if (!adminEmail) {
+                console.log('⚠️ No admin email set, cannot send email');
+                return false;
+            }
+            
+            console.log(`📧 Sending email to admin: ${adminEmail}`);
             
             try {
                 const response = await emailjs.send(
                     EMAIL_CONFIG.serviceId,
-                    templateId,
+                    EMAIL_CONFIG.adminTemplateId,
                     {
-                        to_email: recipientEmail,
-                        ...templateParams
+                        to_email: adminEmail,
+                        subject: subject,
+                        type: type,
+                        from_name: fromName,
+                        message: message,
+                        timestamp: getFormattedTimestamp()
                     }
                 );
                 
@@ -1335,18 +1426,14 @@
                                 '👤'
                             );
                             
-                            // Send email if admin is not active
-                            if (!isUserActive()) {
-                                sendEmailNotification(
-                                    EMAIL_CONFIG.adminEmail,
-                                    EMAIL_CONFIG.adminTemplateId,
-                                    {
-                                        subject: `🆕 New Customer: ${session.customerName}`,
-                                        type: "New Customer",
-                                        from_name: session.customerName,
-                                        message: `${session.customerName} (${session.customerEmail}) just joined and is waiting for assistance.`,
-                                        timestamp: getFormattedTimestamp()
-                                    }
+                            // Send email if admin is not active AND admin email is set
+                            if (!isUserActive() && adminEmail) {
+                                sendEmailToAdmin(
+                                    `🆕 New Customer: ${session.customerName}`,
+                                    "New Customer",
+                                    session.customerName,
+                                    `${session.customerName} (${session.customerEmail}) just joined and is waiting for assistance.`,
+                                    id
                                 );
                             }
                         }
@@ -1394,18 +1481,14 @@
                                             '💬'
                                         );
                                         
-                                        // Send email if admin is not active
-                                        if (!isUserActive()) {
-                                            sendEmailNotification(
-                                                EMAIL_CONFIG.adminEmail,
-                                                EMAIL_CONFIG.adminTemplateId,
-                                                {
-                                                    subject: `💬 New Message from ${session.customerName}`,
-                                                    type: "New Message",
-                                                    from_name: session.customerName,
-                                                    message: lastMsg.text,
-                                                    timestamp: getFormattedTimestamp()
-                                                }
+                                        // Send email if admin is not active AND admin email is set
+                                        if (!isUserActive() && adminEmail) {
+                                            sendEmailToAdmin(
+                                                `💬 New Message from ${session.customerName}`,
+                                                "New Message",
+                                                session.customerName,
+                                                lastMsg.text,
+                                                sessionId
                                             );
                                         }
                                     }
@@ -1557,7 +1640,6 @@
                     if (hoursSinceLogin < 24) {
                         adminNameDisplay.textContent = 'Admin';
                         adminInitials.textContent = 'AD';
-                        adminEmail.textContent = 'admin@support.com';
                         loginContainer.style.display = 'none';
                         dashboard.classList.add('active');
                         loadSessions();
@@ -1609,7 +1691,6 @@
                 localStorage.setItem('adminSession', JSON.stringify({ username: username, timestamp: Date.now() }));
                 adminNameDisplay.textContent = 'Admin';
                 adminInitials.textContent = 'AD';
-                adminEmail.textContent = 'admin@support.com';
                 loginContainer.style.display = 'none';
                 dashboard.classList.add('active');
                 loadSessions();
