@@ -19,7 +19,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     
     <style>
-        /* ALL YOUR EXISTING STYLES - KEEP THEM THE SAME */
         * {
             margin: 0;
             padding: 0;
@@ -125,10 +124,23 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid #fde68a;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .admin-email-setup.hidden {
             display: none;
+        }
+
+        .admin-email-setup span {
+            color: #92400e;
+            font-weight: 500;
+        }
+
+        .email-input-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .admin-email-setup input {
@@ -139,6 +151,11 @@
             font-size: 14px;
         }
 
+        .admin-email-setup input:focus {
+            outline: none;
+            border-color: #95BF47;
+        }
+
         .admin-email-setup button {
             padding: 8px 16px;
             background: #95BF47;
@@ -147,6 +164,16 @@
             border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
+        }
+
+        .admin-email-setup button:hover {
+            background: #7fa33b;
+        }
+
+        .email-status {
+            color: #95BF47;
+            font-size: 12px;
+            margin-left: 10px;
         }
 
         /* Install PWA Banner */
@@ -983,8 +1010,13 @@
                 padding: 14px 20px;
             }
             
+            .admin-email-setup {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
             .admin-email-setup input {
-                width: 200px;
+                width: 100%;
             }
         }
 
@@ -1034,12 +1066,13 @@
     </div>
 
     <div class="dashboard" id="dashboard">
-        <!-- Admin Email Setup Panel (shown if no email saved) -->
+        <!-- Admin Email Setup Panel -->
         <div class="admin-email-setup" id="adminEmailSetup">
-            <span>📧 Please enter your email to receive notifications:</span>
-            <div>
+            <span>📧 Enter your email to receive notifications:</span>
+            <div class="email-input-group">
                 <input type="email" id="adminEmailInput" placeholder="your@email.com" value="trendvibewears@gmail.com">
-                <button id="saveAdminEmail">Save</button>
+                <button id="saveAdminEmail">Save Email</button>
+                <span class="email-status" id="emailStatus"></span>
             </div>
         </div>
 
@@ -1242,88 +1275,145 @@
         const adminEmailSetup = document.getElementById('adminEmailSetup');
         const adminEmailInput = document.getElementById('adminEmailInput');
         const saveAdminEmail = document.getElementById('saveAdminEmail');
+        const emailStatus = document.getElementById('emailStatus');
 
         let notificationTimeout = null;
 
         // ==================== EMAILJS CONFIGURATION ====================
-        // ==================== FIXED EMAILJS CONFIGURATION ====================
-const EMAIL_CONFIG = {
-    serviceId: "service_tgqvv15",
-    adminTemplateId: "template_e9vgdz8"
-};
-
-// Initialize EmailJS
-(function() {
-    emailjs.init("xvNOeNBbWUGNwnwE1");
-    console.log("✅ EmailJS initialized");
-})();
-
-// Check if user is active in the chat
-function isUserActive() {
-    return document.visibilityState === 'visible' && document.hasFocus();
-}
-
-// Format timestamp
-function getFormattedTimestamp() {
-    const now = new Date();
-    return now.toLocaleString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric',
-        hour: '2-digit', 
-        minute: '2-digit'
-    });
-}
-
-// FIXED: Send email notification to admin
-async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
-    console.log('📧 ===== EMAIL DEBUG START =====');
-    console.log('Admin email:', adminEmail);
-    console.log('User active?', isUserActive());
-    
-    if (!adminEmail) {
-        console.log('❌ No admin email set');
-        return false;
-    }
-    
-    if (isUserActive()) {
-        console.log('ℹ️ User active - in-app only');
-        return false;
-    }
-    
-    console.log(`📧 Sending to: ${adminEmail}`);
-    
-    try {
-        // CRITICAL: Include ALL required template variables
-        const emailData = {
-            to_email: adminEmail,      // Required - matches template
-            to_name: "Admin",           // Optional but good
-            subject: subject,
-            type: type,
-            from_name: fromName,
-            message: message,
-            timestamp: getFormattedTimestamp(),
-            reply_to: "noreply@shopify.com"
+        const EMAIL_CONFIG = {
+            serviceId: "service_tgqvv15",
+            adminTemplateId: "template_e9vgdz8"
         };
+
+        // Initialize EmailJS
+        (function() {
+            emailjs.init("xvNOeNBbWUGNwnwE1");
+            console.log("✅ EmailJS initialized");
+        })();
+
+        // ==================== ADMIN EMAIL SETUP ====================
         
-        console.log("📧 Email data:", emailData);
-        
-        const response = await emailjs.send(
-            EMAIL_CONFIG.serviceId,
-            EMAIL_CONFIG.adminTemplateId,
-            emailData
-        );
-        
-        console.log("✅ Email sent! Status:", response.status);
-        return true;
-    } catch (error) {
-        console.error("❌ Email failed!");
-        console.error("Status:", error.status);
-        console.error("Text:", error.text);
-        return false;
-    }
-}
-    
+        // Load saved admin email from localStorage
+        const savedAdminEmail = localStorage.getItem('adminEmail');
+        if (savedAdminEmail) {
+            adminEmail = savedAdminEmail;
+            adminEmailSetup.classList.add('hidden');
+            adminEmailDisplay.textContent = `📧 ${adminEmail}`;
+            adminEmailPlaceholder.textContent = `Admin: ${adminEmail}`;
+            console.log("✅ Loaded saved admin email:", adminEmail);
+        } else {
+            adminEmailSetup.classList.remove('hidden');
+            console.log("📧 No saved email found");
+        }
+
+        // FIXED: Save email button event listener
+        saveAdminEmail.addEventListener('click', function() {
+            const email = adminEmailInput.value.trim();
+            console.log("📧 Save button clicked, email:", email);
+            
+            if (!email) {
+                emailStatus.textContent = "❌ Please enter an email";
+                emailStatus.style.color = "#ef4444";
+                return;
+            }
+            
+            if (!email.includes('@') || !email.includes('.')) {
+                emailStatus.textContent = "❌ Please enter a valid email";
+                emailStatus.style.color = "#ef4444";
+                return;
+            }
+            
+            // Save to localStorage
+            localStorage.setItem('adminEmail', email);
+            adminEmail = email;
+            
+            // Update UI
+            adminEmailSetup.classList.add('hidden');
+            adminEmailDisplay.textContent = `📧 ${email}`;
+            adminEmailPlaceholder.textContent = `Admin: ${email}`;
+            
+            // Show success message
+            emailStatus.textContent = "✅ Email saved!";
+            emailStatus.style.color = "#95BF47";
+            
+            // Show in-app notification
+            showInAppNotification('✅ Email Saved', `Notifications will be sent to ${email}`);
+            
+            console.log("✅ Admin email saved:", email);
+        });
+
+        // Also allow Enter key in input
+        adminEmailInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveAdminEmail.click();
+            }
+        });
+
+        // Check if user is active in the chat
+        function isUserActive() {
+            return document.visibilityState === 'visible' && document.hasFocus();
+        }
+
+        // Format timestamp
+        function getFormattedTimestamp() {
+            const now = new Date();
+            return now.toLocaleString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
+        }
+
+        // Send email notification to admin
+        async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
+            console.log('📧 ===== EMAIL DEBUG START =====');
+            console.log('Admin email:', adminEmail);
+            console.log('User active?', isUserActive());
+            
+            if (!adminEmail) {
+                console.log('❌ No admin email set, cannot send email');
+                return false;
+            }
+            
+            if (isUserActive()) {
+                console.log('ℹ️ User active - in-app only');
+                return false;
+            }
+            
+            console.log(`📧 Sending to: ${adminEmail}`);
+            
+            try {
+                const emailData = {
+                    to_email: adminEmail,
+                    to_name: "Admin",
+                    subject: subject,
+                    type: type,
+                    from_name: fromName,
+                    message: message,
+                    timestamp: getFormattedTimestamp(),
+                    reply_to: "noreply@shopify.com"
+                };
+                
+                console.log("📧 Email data:", emailData);
+                
+                const response = await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    EMAIL_CONFIG.adminTemplateId,
+                    emailData
+                );
+                
+                console.log("✅ Email sent! Status:", response.status);
+                return true;
+            } catch (error) {
+                console.error("❌ Email failed!");
+                console.error("Status:", error.status);
+                console.error("Text:", error.text);
+                return false;
+            }
+        }
+
         // ==================== PWA INSTALL ====================
 
         isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -1695,6 +1785,7 @@ async function sendEmailToAdmin(subject, type, fromName, message, sessionId = nu
         logoutBtn.addEventListener('click', () => {
             if (currentSessionId && adminPresenceRef) set(adminPresenceRef, false);
             localStorage.removeItem('adminSession');
+            localStorage.removeItem('adminEmail'); // Also clear email on logout
             dashboard.classList.remove('active');
             loginContainer.style.display = 'flex';
             currentSessionId = null;
