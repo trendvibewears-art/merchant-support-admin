@@ -1246,81 +1246,64 @@
         let notificationTimeout = null;
 
         // ==================== EMAILJS CONFIGURATION ====================
-        const EMAIL_CONFIG = {
-            serviceId: "service_tgqvv15",
-            adminTemplateId: "template_e9vgdz8"
-        };
+        // ==================== FIXED EMAILJS CONFIGURATION ====================
+const EMAIL_CONFIG = {
+    serviceId: "service_tgqvv15",
+    adminTemplateId: "template_e9vgdz8"
+};
 
-        // Initialize EmailJS
-        (function() {
-            emailjs.init("xvNOeNBbWUGNwnwE1");
-            console.log("✅ EmailJS initialized");
-        })();
+// Initialize EmailJS
+(function() {
+    emailjs.init("xvNOeNBbWUGNwnwE1");
+    console.log("✅ EmailJS initialized");
+})();
 
-        // ==================== ADMIN EMAIL SETUP ====================
-        
-        // Load saved admin email from localStorage
-        const savedAdminEmail = localStorage.getItem('adminEmail');
-        if (savedAdminEmail) {
-            adminEmail = savedAdminEmail;
-            adminEmailSetup.classList.add('hidden');
-            adminEmailDisplay.textContent = `📧 ${adminEmail}`;
-            adminEmailPlaceholder.textContent = `Admin: ${adminEmail}`;
-        } else {
-            adminEmailSetup.classList.remove('hidden');
-        }
+// Check if user is active in the chat
+function isUserActive() {
+    return document.visibilityState === 'visible' && document.hasFocus();
+}
 
-        saveAdminEmail.addEventListener('click', () => {
-            const email = adminEmailInput.value.trim();
-            if (email && email.includes('@')) {
-                adminEmail = email;
-                localStorage.setItem('adminEmail', email);
-                adminEmailSetup.classList.add('hidden');
-                adminEmailDisplay.textContent = `📧 ${email}`;
-                adminEmailPlaceholder.textContent = `Admin: ${email}`;
-                
-                // Show success notification
-                showInAppNotification('✅ Email Saved', `Notifications will be sent to ${email}`);
-            } else {
-                alert('Please enter a valid email address');
-            }
-        });
+// Format timestamp
+function getFormattedTimestamp() {
+    const now = new Date();
+    return now.toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: '2-digit', 
+        minute: '2-digit'
+    });
+}
 
-        // Check if user is active in the chat
-        function isUserActive() {
-            return document.visibilityState === 'visible' && document.hasFocus();
-        }
-
-        // Send email notification to admin
-        async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
+// FIXED: Send email notification to admin
+async function sendEmailToAdmin(subject, type, fromName, message, sessionId = null) {
     console.log('📧 ===== EMAIL DEBUG START =====');
     console.log('Admin email:', adminEmail);
+    console.log('User active?', isUserActive());
     
     if (!adminEmail) {
-        console.log('❌ No admin email set, cannot send email');
-        console.log('📧 ===== EMAIL DEBUG END =====');
+        console.log('❌ No admin email set');
         return false;
     }
     
     if (isUserActive()) {
-        console.log('ℹ️ User is active, not sending email');
-        console.log('📧 ===== EMAIL DEBUG END =====');
+        console.log('ℹ️ User active - in-app only');
         return false;
     }
     
-    console.log(`📧 Attempting to send email to: ${adminEmail}`);
+    console.log(`📧 Sending to: ${adminEmail}`);
     
     try {
-        // Prepare email data
+        // CRITICAL: Include ALL required template variables
         const emailData = {
-            to_email: adminEmail,      // CRITICAL: Must match template
-            to_name: "Admin",           // Optional
+            to_email: adminEmail,      // Required - matches template
+            to_name: "Admin",           // Optional but good
             subject: subject,
             type: type,
             from_name: fromName,
             message: message,
             timestamp: getFormattedTimestamp(),
-            reply_to: "noreply@shopify.com"  // Optional
+            reply_to: "noreply@shopify.com"
         };
         
         console.log("📧 Email data:", emailData);
@@ -1331,28 +1314,12 @@
             emailData
         );
         
-        console.log("✅ Email sent successfully!");
-        console.log("Response:", response);
-        console.log('📧 ===== EMAIL DEBUG END =====');
+        console.log("✅ Email sent! Status:", response.status);
         return true;
     } catch (error) {
-        console.error("❌ Email failed to send!");
-        console.error("Error status:", error.status);
-        console.error("Error text:", error.text);
-        
-        // Special handling for 422 error
-        if (error.status === 422) {
-            console.error("❌ Template variable mismatch!");
-            console.error("Check that your EmailJS template has these variables:");
-            console.error("- to_email (REQUIRED)");
-            console.error("- subject");
-            console.error("- type");
-            console.error("- from_name");
-            console.error("- message");
-            console.error("- timestamp");
-        }
-        
-        console.log('📧 ===== EMAIL DEBUG END =====');
+        console.error("❌ Email failed!");
+        console.error("Status:", error.status);
+        console.error("Text:", error.text);
         return false;
     }
 }
